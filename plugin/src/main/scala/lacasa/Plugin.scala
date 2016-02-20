@@ -6,15 +6,21 @@ import scala.tools.nsc.transform._
 import scala.collection.{mutable, immutable}
 
 class Plugin(val global: Global) extends NscPlugin {
-  import global._
+  import global.{log => _, _}
 
   val name = "lacasa"
   val description = "LaCasa plugin"
   val components = List[NscPluginComponent](PluginComponent, ReporterComponent)
 
+  val logEnabled = System.getProperty("lacasa.plugin.logging", "false") == "true"
+  def log(msg: => String): Unit = {
+    if (logEnabled)
+      println(msg)
+  }
+
   object PluginComponent extends NscPluginComponent {
     val global = Plugin.this.global
-    import global._
+    import global.{log => _, _}
     import definitions._
 
     override val runsAfter = List("refchecks")
@@ -22,7 +28,7 @@ class Plugin(val global: Global) extends NscPlugin {
 
     var insecureClasses: Set[Symbol] = Set()
     // inheriting from `scala.AnyRef' is secure
-    var secureClasses: Set[Symbol] = Set(AnyRefClass)
+    var secureClasses: Set[Symbol] = Set(AnyRefClass, ObjectClass)
     // invariant: \forall s \in deps(c). !isKnown(s)
     var deps: Map[Symbol, List[Symbol]] = Map()
 
@@ -55,14 +61,14 @@ class Plugin(val global: Global) extends NscPlugin {
           atOwner(currentOwner) { super.traverse(tree) }
 
         case obj @ ModuleDef(mods, name, impl) =>
-          println(s"checking object $name")
-          println(s"sym.isModule: ${obj.symbol.isModule}")
+          log(s"checking object $name")
+          log(s"sym.isModule: ${obj.symbol.isModule}")
           traverse(impl)
 
         case cls @ ClassDef(mods, name, tparams, impl) =>
-          println(s"checking class $name")
-          println(s"sym.isClass: ${cls.symbol.isClass}")
-          println(s"sym.isModuleClass: ${cls.symbol.isModuleClass}")
+          log(s"checking class $name")
+          log(s"sym.isClass: ${cls.symbol.isClass}")
+          log(s"sym.isModuleClass: ${cls.symbol.isModuleClass}")
           traverse(impl)
 
         case templ @ Template(parents, self, body) =>
@@ -85,8 +91,8 @@ class Plugin(val global: Global) extends NscPlugin {
           }
 
         case methodDef @ DefDef(mods, name, tparams, vparamss, tpt, rhs) =>
-          println(s"checking method definition ${methodDef.symbol.name}")
-          println(s"raw:\n${showRaw(methodDef)}")
+          log(s"checking method definition ${methodDef.symbol.name}")
+          log(s"raw:\n${showRaw(methodDef)}")
 
           currentMethods = methodDef.symbol :: currentMethods
           traverse(rhs)
@@ -94,8 +100,8 @@ class Plugin(val global: Global) extends NscPlugin {
 
         case app @ Apply(fun, args) =>
           // step 1: fun is setter of an object -> problem
-          println(s"checking apply of ${fun.symbol.name}")
-          println(s"setter of object: ${isSetterOfObject(fun.symbol)}")
+          log(s"checking apply of ${fun.symbol.name}")
+          log(s"setter of object: ${isSetterOfObject(fun.symbol)}")
 
           if (isSetterOfObject(fun.symbol)) {
             insecureMethods = insecureMethods + currentMethods.head
@@ -105,15 +111,15 @@ class Plugin(val global: Global) extends NscPlugin {
           super.traverse(tree)
 
         case unhandled =>
-          println(s"unhandled tree $tree")
-          println(s"raw:\n${showRaw(tree)}")
+          log(s"unhandled tree $tree")
+          log(s"raw:\n${showRaw(tree)}")
           super.traverse(tree)
       }
     }
 
     class ObjectCapabilitySecurePhase(prev: Phase) extends StdPhase(prev) {
       override def apply(unit: CompilationUnit): Unit = {
-        println("applying LaCasa ObjectCapabilitySecurePhase...")
+        log("applying LaCasa ObjectCapabilitySecurePhase...")
         val ocst = new ObjectCapabilitySecureTraverser(unit)
         ocst.traverse(unit.body)
       }
@@ -125,7 +131,7 @@ class Plugin(val global: Global) extends NscPlugin {
 
   object ReporterComponent extends NscPluginComponent {
     val global = Plugin.this.global
-    import global._
+    import global.{log => _, _}
     import definitions._
 
     override val runsAfter = List("lacasa")
@@ -138,14 +144,18 @@ class Plugin(val global: Global) extends NscPlugin {
         override def apply(unit: CompilationUnit): Unit =
           if (!hasRun) {
             hasRun = true
-            println("summary of results")
-            println("==================")
-            println("insecure classes:")
-            PluginComponent.insecureClasses.foreach { cls => println(cls) }
+            log("summary of results")
+            log("==================")
+            log("insecure classes:")
+            PluginComponent.insecureClasses.foreach { cls => log(cls.toString) }
 
             if (PluginComponent.deps.keySet.nonEmpty) {
-              println("\nunresolved dependencies:")
-              println(PluginComponent.deps.toString)
+              log("\nunresolved dependencies:")
+              log(PluginComponent.deps.toString)
+            }
+
+            if (PluginComponent.insecureClasses.nonEmpty) {
+              error("insecure classes exist")
             }
           }
       }

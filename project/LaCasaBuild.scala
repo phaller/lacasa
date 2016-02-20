@@ -1,6 +1,11 @@
 import sbt._
 import Keys._
 
+object Dependencies {
+  val junit = "junit" % "junit" % "4.12" % "test"
+  val junitIntf = "com.novocode" % "junit-interface" % "0.11" % "test"
+}
+
 object LaCasaBuild extends Build {
 
   lazy val commonSettings = Defaults.defaultSettings ++ Seq(
@@ -34,6 +39,7 @@ object LaCasaBuild extends Build {
     libraryDependencies <+= (scalaVersion)("org.scala-lang" % "scala-library" % _),
     libraryDependencies <+= (scalaVersion)("org.scala-lang" % "scala-reflect" % _),
     libraryDependencies <+= (scalaVersion)("org.scala-lang" % "scala-compiler" % _),
+    libraryDependencies ++= Seq(Dependencies.junit, Dependencies.junitIntf),
     publishMavenStyle := true,
     publishArtifact in Test := false,
     publishTo <<= version { v: String =>

@@ -21,15 +21,32 @@ class Plugin(val global: Global) extends NscPlugin {
     val phaseName = "lacasa"
 
     var insecureClasses: Set[Symbol] = Set()
-    var secureClasses: Set[Symbol] = Set()
+    // inheriting from `scala.AnyRef' is secure
+    var secureClasses: Set[Symbol] = Set(AnyRefClass)
+    // invariant: \forall s \in deps(c). !isKnown(s)
+    var deps: Map[Symbol, List[Symbol]] = Map()
 
     def isKnown(cls: Symbol): Boolean =
       insecureClasses.contains(cls) || secureClasses.contains(cls)
 
+    def addInsecureClass(cls: Symbol): Unit =
+      insecureClasses = insecureClasses + cls
+
+    def mkInsecure(cls: Symbol): Unit = {
+      if (deps.isDefinedAt(cls))
+        deps = deps - cls
+      addInsecureClass(cls)
+      // go through classes with unknown status (= keys in deps)
+      // if `cls' is one of the values: make insecure
+      val newInsecure =
+        for ((cls1, itsDeps) <- deps; if itsDeps.contains(cls)) yield cls1
+      for (cls1 <- newInsecure) mkInsecure(cls1)
+    }
+
     def isSetterOfObject(method: Symbol): Boolean =
       method.owner.isModuleClass && method.isSetter
 
-    class ObjectCapabilitySecureTraverser(phase: ObjectCapabilitySecurePhase, unit: CompilationUnit) extends Traverser {
+    class ObjectCapabilitySecureTraverser(unit: CompilationUnit) extends Traverser {
       var insecureMethods: Set[Symbol] = Set()
       var currentMethods: List[Symbol] = List()
 
@@ -49,8 +66,20 @@ class Plugin(val global: Global) extends NscPlugin {
           traverse(impl)
 
         case templ @ Template(parents, self, body) =>
+          val cls = templ.symbol.owner
           if (parents.exists(parent => isKnown(parent.symbol) && insecureClasses.contains(parent.symbol))) {
-            phase.addInsecureClass(templ.symbol.owner)
+            mkInsecure(cls)
+          } else if (parents.exists(parent => !isKnown(parent.symbol))) {
+            // for each unknown parent: create dependency
+            parents.foreach { parent =>
+              val parentSym = parent.symbol
+              if (!isKnown(parentSym)) {
+                val currentDeps = deps.getOrElse(cls, List[Symbol]())
+                if (!currentDeps.contains(parentSym))
+                  deps = deps + (cls -> (parentSym :: currentDeps))
+              }
+            }
+            atOwner(currentOwner) { super.traverse(tree) }
           } else {
             atOwner(currentOwner) { super.traverse(tree) }
           }
@@ -70,7 +99,7 @@ class Plugin(val global: Global) extends NscPlugin {
 
           if (isSetterOfObject(fun.symbol)) {
             insecureMethods = insecureMethods + currentMethods.head
-            phase.addInsecureClass(currentMethods.head.owner)
+            mkInsecure(currentMethods.head.owner)
           }
 
           super.traverse(tree)
@@ -83,12 +112,9 @@ class Plugin(val global: Global) extends NscPlugin {
     }
 
     class ObjectCapabilitySecurePhase(prev: Phase) extends StdPhase(prev) {
-      def addInsecureClass(cls: Symbol): Unit =
-        insecureClasses = insecureClasses + cls
-
       override def apply(unit: CompilationUnit): Unit = {
         println("applying LaCasa ObjectCapabilitySecurePhase...")
-        val ocst = new ObjectCapabilitySecureTraverser(this, unit)
+        val ocst = new ObjectCapabilitySecureTraverser(unit)
         ocst.traverse(unit.body)
       }
     }
@@ -111,11 +137,16 @@ class Plugin(val global: Global) extends NscPlugin {
       new StdPhase(prev) {
         override def apply(unit: CompilationUnit): Unit =
           if (!hasRun) {
+            hasRun = true
             println("summary of results")
             println("==================")
             println("insecure classes:")
             PluginComponent.insecureClasses.foreach { cls => println(cls) }
-            hasRun = true
+
+            if (PluginComponent.deps.keySet.nonEmpty) {
+              println("\nunresolved dependencies:")
+              println(PluginComponent.deps.toString)
+            }
           }
       }
   }

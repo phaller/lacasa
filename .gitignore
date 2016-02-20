@@ -1,0 +1,5 @@
+plugin/target/
+project/target/
+target/
+sandbox/
+*~

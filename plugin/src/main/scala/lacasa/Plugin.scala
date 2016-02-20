@@ -12,7 +12,7 @@ class Plugin(val global: Global) extends NscPlugin {
   val description = "LaCasa plugin"
   val components = List[NscPluginComponent](PluginComponent, ReporterComponent)
 
-  object PluginComponent extends NscPluginComponent with TypingTransformers {
+  object PluginComponent extends NscPluginComponent {
     val global = Plugin.this.global
     import global._
     import definitions._
@@ -29,31 +29,30 @@ class Plugin(val global: Global) extends NscPlugin {
     def isSetterOfObject(method: Symbol): Boolean =
       method.owner.isModuleClass && method.isSetter
 
-    class ObjectCapabilitySecureTransformer(phase: ObjectCapabilitySecurePhase, unit: CompilationUnit) extends TypingTransformer(unit) {
+    class ObjectCapabilitySecureTraverser(phase: ObjectCapabilitySecurePhase, unit: CompilationUnit) extends Traverser {
       var insecureMethods: Set[Symbol] = Set()
       var currentMethods: List[Symbol] = List()
 
-      override def transform(tree: Tree): Tree = tree match {
+      override def traverse(tree: Tree): Unit = tree match {
         case PackageDef(_, _) =>
-          atOwner(currentOwner) { super.transform(tree) }
+          atOwner(currentOwner) { super.traverse(tree) }
 
         case obj @ ModuleDef(mods, name, impl) =>
           println(s"checking object $name")
           println(s"sym.isModule: ${obj.symbol.isModule}")
-          atOwner(currentOwner) { super.transform(impl) }
+          traverse(impl)
 
         case cls @ ClassDef(mods, name, tparams, impl) =>
           println(s"checking class $name")
           println(s"sym.isClass: ${cls.symbol.isClass}")
           println(s"sym.isModuleClass: ${cls.symbol.isModuleClass}")
-          atOwner(currentOwner) { transform(impl) }
+          traverse(impl)
 
         case templ @ Template(parents, self, body) =>
           if (parents.exists(parent => isKnown(parent.symbol) && insecureClasses.contains(parent.symbol))) {
             phase.addInsecureClass(templ.symbol.owner)
-            templ
           } else {
-            atOwner(currentOwner) { super.transform(tree) }
+            atOwner(currentOwner) { super.traverse(tree) }
           }
 
         case methodDef @ DefDef(mods, name, tparams, vparamss, tpt, rhs) =>
@@ -61,9 +60,8 @@ class Plugin(val global: Global) extends NscPlugin {
           println(s"raw:\n${showRaw(methodDef)}")
 
           currentMethods = methodDef.symbol :: currentMethods
-          val res = atOwner(currentOwner) { transform(rhs) }
+          traverse(rhs)
           currentMethods = currentMethods.tail
-          res
 
         case app @ Apply(fun, args) =>
           // step 1: fun is setter of an object -> problem
@@ -75,12 +73,12 @@ class Plugin(val global: Global) extends NscPlugin {
             phase.addInsecureClass(currentMethods.head.owner)
           }
 
-          super.transform(tree)
+          super.traverse(tree)
 
         case unhandled =>
           println(s"unhandled tree $tree")
           println(s"raw:\n${showRaw(tree)}")
-          super.transform(tree)
+          super.traverse(tree)
       }
     }
 
@@ -90,8 +88,8 @@ class Plugin(val global: Global) extends NscPlugin {
 
       override def apply(unit: CompilationUnit): Unit = {
         println("applying LaCasa ObjectCapabilitySecurePhase...")
-        val sl = new ObjectCapabilitySecureTransformer(this, unit)
-        sl.transform(unit.body)
+        val ocst = new ObjectCapabilitySecureTraverser(this, unit)
+        ocst.traverse(unit.body)
       }
     }
 

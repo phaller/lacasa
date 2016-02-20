@@ -1,0 +1,4 @@
+<plugin>
+  <name>lacasa-plugin</name>
+  <classname>lacasa.Plugin</classname>
+</plugin>

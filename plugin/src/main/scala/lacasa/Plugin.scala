@@ -22,9 +22,39 @@ class Plugin(val global: Global) extends NscPlugin {
     val global = Plugin.this.global
     import global.{log => _, _}
     import definitions._
+    import reflect.internal.Flags._
 
     override val runsAfter = List("refchecks")
     val phaseName = "lacasa"
+
+    var analyzedClasses: Set[Symbol] = Set()
+    var analyzedTraits: Set[Symbol] = Set()
+    var analyzedObjects: Set[Symbol] = Set()
+    var analyzedTempls: Set[Symbol] = Set()
+
+    def addClass(sym: Symbol): Unit =
+      analyzedClasses += sym
+
+    def addTrait(sym: Symbol): Unit =
+      analyzedTraits += sym
+
+    def addObject(sym: Symbol): Unit =
+      analyzedObjects += sym
+
+    def addTempl(sym: Symbol): Unit =
+      analyzedTempls += sym
+
+    var patterns: Map[Int, Int] = Map()
+    def addPattern(num: Int): Unit = {
+      val current = patterns.getOrElse(num, 0)
+      patterns += (num -> (current + 1))
+    }
+
+    var patternsChecked: Map[Int, Int] = Map()
+    def checkPattern(num: Int): Unit = {
+      val current = patternsChecked.getOrElse(num, 0)
+      patternsChecked += (num -> (current + 1))
+    }
 
     var insecureClasses: Set[Symbol] = Set()
     // inheriting from `scala.AnyRef' is secure
@@ -57,37 +87,34 @@ class Plugin(val global: Global) extends NscPlugin {
       var currentMethods: List[Symbol] = List()
 
       override def traverse(tree: Tree): Unit = tree match {
-        case PackageDef(_, _) =>
-          atOwner(currentOwner) { super.traverse(tree) }
-
-        case obj @ ModuleDef(mods, name, impl) =>
-          log(s"checking object $name")
-          log(s"sym.isModule: ${obj.symbol.isModule}")
-          traverse(impl)
 
         case cls @ ClassDef(mods, name, tparams, impl) =>
           log(s"checking class $name")
           log(s"sym.isClass: ${cls.symbol.isClass}")
           log(s"sym.isModuleClass: ${cls.symbol.isModuleClass}")
+          if (cls.symbol.isModuleClass) addObject(cls.symbol) else {
+            if (mods hasFlag TRAIT) addTrait(cls.symbol) else addClass(cls.symbol)
+          }
           traverse(impl)
 
         case templ @ Template(parents, self, body) =>
           val cls = templ.symbol.owner
+          addTempl(cls)
           if (parents.exists(parent => isKnown(parent.symbol) && insecureClasses.contains(parent.symbol))) {
             mkInsecure(cls)
-          } else if (parents.exists(parent => !isKnown(parent.symbol))) {
-            // for each unknown parent: create dependency
-            parents.foreach { parent =>
-              val parentSym = parent.symbol
-              if (!isKnown(parentSym)) {
-                val currentDeps = deps.getOrElse(cls, List[Symbol]())
-                if (!currentDeps.contains(parentSym))
-                  deps = deps + (cls -> (parentSym :: currentDeps))
+          } else {
+            if (parents.exists(parent => !isKnown(parent.symbol))) {
+              // for each unknown parent: create dependency
+              parents.foreach { parent =>
+                val parentSym = parent.symbol
+                if (!isKnown(parentSym)) {
+                  val currentDeps = deps.getOrElse(cls, List[Symbol]())
+                  if (!currentDeps.contains(parentSym))
+                    deps = deps + (cls -> (parentSym :: currentDeps))
+                }
               }
             }
-            atOwner(currentOwner) { super.traverse(tree) }
-          } else {
-            atOwner(currentOwner) { super.traverse(tree) }
+            body.foreach(t => traverse(t))
           }
 
         case methodDef @ DefDef(mods, name, tparams, vparamss, tpt, rhs) =>
@@ -99,16 +126,19 @@ class Plugin(val global: Global) extends NscPlugin {
           currentMethods = currentMethods.tail
 
         case app @ Apply(fun, args) =>
-          // step 1: fun is setter of an object -> problem
+          // problem pattern 1: fun is setter of an object
           log(s"checking apply of ${fun.symbol.name}")
           log(s"setter of object: ${isSetterOfObject(fun.symbol)}")
 
-          if (isSetterOfObject(fun.symbol)) {
+          checkPattern(1)
+          if (isSetterOfObject(fun.symbol) && currentMethods.nonEmpty /*TODO*/) {
             insecureMethods = insecureMethods + currentMethods.head
             mkInsecure(currentMethods.head.owner)
+            addPattern(1)
           }
 
-          super.traverse(tree)
+          traverse(fun)
+          args.foreach { arg => traverse(arg) }
 
         case unhandled =>
           log(s"unhandled tree $tree")
@@ -144,6 +174,16 @@ class Plugin(val global: Global) extends NscPlugin {
         override def apply(unit: CompilationUnit): Unit =
           if (!hasRun) {
             hasRun = true
+            reporter.echo("LaCasa plugin ran successfully")
+            reporter.echo("#classes analyzed: " + PluginComponent.analyzedClasses.size)
+            reporter.echo("#traits analyzed: " + PluginComponent.analyzedTraits.size)
+            reporter.echo("#objects analyzed: " + PluginComponent.analyzedObjects.size)
+            reporter.echo("#templs analyzed: " + PluginComponent.analyzedTempls.size)
+            reporter.echo(s"patterns checked: ${PluginComponent.patternsChecked}")
+            reporter.echo(s"patterns found: ${PluginComponent.patterns}")
+
+            //reporter.warning(NoPosition, "reporter.warning: LaCasa plugin ran successfully")
+
             log("summary of results")
             log("==================")
             log("insecure classes:")
@@ -157,7 +197,7 @@ class Plugin(val global: Global) extends NscPlugin {
             if (PluginComponent.insecureClasses.nonEmpty) {
               val classNames = PluginComponent.insecureClasses.map(cls => cls.toString)
               log(s"""error: insecure classes: ${classNames.mkString(",")}""")
-              error(s"""insecure classes: ${classNames.mkString(",")}""")
+              //error(s"""insecure classes: ${classNames.mkString(",")}""")
             }
           }
       }

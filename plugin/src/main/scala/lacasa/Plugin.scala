@@ -44,6 +44,10 @@ class Plugin(val global: Global) extends NscPlugin {
     def addTempl(sym: Symbol): Unit =
       analyzedTempls += sym
 
+    var mutableObjects: Set[Symbol] = Set()
+    def addMutableObject(sym: Symbol): Unit =
+      mutableObjects += sym
+
     var patterns: Map[Int, Int] = Map()
     def addPattern(num: Int): Unit = {
       val current = patterns.getOrElse(num, 0)
@@ -117,6 +121,13 @@ class Plugin(val global: Global) extends NscPlugin {
             body.foreach(t => traverse(t))
           }
 
+        case vd @ ValDef(mods, name, tpt, rhs) =>
+          // if vd is a var and owner is object -> keep track of object!
+          if (mods.hasFlag(MUTABLE) && vd.symbol.owner.isModuleClass) {
+            addMutableObject(vd.symbol.owner)
+          }
+          traverse(rhs)
+
         case methodDef @ DefDef(mods, name, tparams, vparamss, tpt, rhs) =>
           log(s"checking method definition ${methodDef.symbol.name}")
           log(s"raw:\n${showRaw(methodDef)}")
@@ -179,6 +190,12 @@ class Plugin(val global: Global) extends NscPlugin {
             reporter.echo("#traits analyzed: " + PluginComponent.analyzedTraits.size)
             reporter.echo("#objects analyzed: " + PluginComponent.analyzedObjects.size)
             reporter.echo("#templs analyzed: " + PluginComponent.analyzedTempls.size)
+
+            reporter.echo(s"#objects mutable: ${PluginComponent.mutableObjects.size}")
+            PluginComponent.mutableObjects.foreach { sym =>
+              reporter.echo(s"object ${sym.name}")
+            }
+
             reporter.echo(s"patterns checked: ${PluginComponent.patternsChecked}")
             reporter.echo(s"patterns found: ${PluginComponent.patterns}")
 

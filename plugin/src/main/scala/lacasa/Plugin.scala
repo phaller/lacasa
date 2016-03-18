@@ -77,6 +77,8 @@ class Plugin(val global: Global) extends NscPlugin {
     // invariant: \forall s \in depsGlobal(c). !isKnownMutable(s)
     var depsGlobal: Map[Symbol, List[Symbol]] = Map()
 
+    var insecureMethods: Set[Symbol] = Set()
+
     def isKnown(cls: Symbol): Boolean =
       insecureClasses.contains(cls) || secureClasses.contains(cls)
 
@@ -109,8 +111,18 @@ class Plugin(val global: Global) extends NscPlugin {
       method.setterIn(method.owner) != NoSymbol
     }
 
+    def dependOn(cls: Symbol, method: Symbol, other: Symbol): Unit = {
+      if (isKnown(other) && insecureClasses.contains(other)) {
+        insecureMethods = insecureMethods + method
+        mkInsecure(cls)
+      } else if (!isKnown(other)) {
+        val currentDeps = deps.getOrElse(cls, List[Symbol]())
+        if (!currentDeps.contains(other))
+          deps = deps + (cls -> (other :: currentDeps))
+      }
+    }
+
     class ObjectCapabilitySecureTraverser(unit: CompilationUnit) extends Traverser {
-      var insecureMethods: Set[Symbol] = Set()
       var currentMethods: List[Symbol] = List()
 
       override def traverse(tree: Tree): Unit = tree match {
@@ -213,6 +225,35 @@ class Plugin(val global: Global) extends NscPlugin {
           }
 
           traverse(obj)
+
+        case New(id) =>
+          // problem pattern 4: create instance of insecure class
+          log(s"checking constructor invocation $id")
+
+          checkPattern(4)
+          if (currentMethods.nonEmpty /*TODO*/ && !currentMethods.head.owner.isModuleClass) {
+            val cls = currentMethods.head.owner
+            id match {
+              case tpt @ TypeTree() =>
+                // empty TypeTree: check original...
+                val orig = tpt.original
+                orig match {
+                  case AppliedTypeTree(classToCheck, tpeArgs) =>
+                    val tpeArgsToCheck = tpeArgs.map {
+                      case mt @ TypeTree() => mt.original
+                      case nonMt => nonMt
+                    }
+                    dependOn(cls, currentMethods.head, classToCheck.symbol)
+                    tpeArgsToCheck.foreach(tparg => dependOn(cls, currentMethods.head, tparg.symbol))
+
+                  case _ => /* do nothing */
+                }
+
+              case other =>
+                // non-empty TypeTree: check its symbol directly
+                dependOn(cls, currentMethods.head, other.symbol)
+            }
+          }
 
         case Literal(any) => /* all good */
 

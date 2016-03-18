@@ -113,4 +113,86 @@ class C {
     }
   }
 
+  @Test
+  def test7() {
+    expectError("class D") {
+      """
+object C {
+  var danger = 5
+}
+class C(x: Int) {
+  def m(y: Int): Unit = {
+    val v1 = C.danger + x + y
+  }
+}
+class D {
+  def m2(y: Int): Unit = {
+    val c = new C(y)
+  }
+}"""
+    }
+  }
+
+  @Test
+  def test8() {
+    expectError("class D") {
+      """
+class D {
+  def m2(y: Int): Unit = {
+    val c = new C(y)
+  }
+}
+object C {
+  var danger = 5
+}
+class C(x: Int) {
+  def m(y: Int): Unit = {
+    val v1 = C.danger + x + y
+  }
+}"""
+    }
+  }
+
+  @Test
+  def test9() {
+    expectError("class D") {
+      """
+object C {
+  var danger = 5
+}
+class C(x: Int) {
+  def m(y: Int): Unit = {
+    val v1 = C.danger + x + y
+  }
+}
+class E[T] { var x: T = _ }
+class D {
+  def m2(y: Int): Unit = {
+    val inst = new E[C]
+  }
+}"""
+    }
+  }
+
+  @Test
+  def test10() {
+    expectError("class D") {
+      """
+class E[T] { var x: T = _ }
+class D {
+  def m2(y: Int): Unit = {
+    val inst = new E[C]
+  }
+}
+object C {
+  var danger = 5
+}
+class C(x: Int) {
+  def m(y: Int): Unit = {
+    val v1 = C.danger + x + y
+  }
+}"""
+    }
+  }
+
 }

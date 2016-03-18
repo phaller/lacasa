@@ -60,4 +60,23 @@ class D extends C {
     }
   }
 
+  @Test
+  def test4() {
+    expectError("insecure") {
+      """
+object C {
+  val nodanger = 10
+  var danger = 5
+}
+
+class C {
+  val f = 5
+  def m(x: Int): Unit = {
+    val v1 = C.nodanger
+    val v2 = C.danger
+  }
+}"""
+    }
+  }
+
 }

@@ -86,6 +86,11 @@ class Plugin(val global: Global) extends NscPlugin {
     def isSetterOfObject(method: Symbol): Boolean =
       method.owner.isModuleClass && method.isSetter
 
+    def isGetterOfObjectWithSetter(method: Symbol): Boolean = {
+      method.owner.isModuleClass && method.isGetter &&
+      method.setterIn(method.owner) != NoSymbol
+    }
+
     class ObjectCapabilitySecureTraverser(unit: CompilationUnit) extends Traverser {
       var insecureMethods: Set[Symbol] = Set()
       var currentMethods: List[Symbol] = List()
@@ -151,6 +156,22 @@ class Plugin(val global: Global) extends NscPlugin {
           traverse(fun)
           args.foreach { arg => traverse(arg) }
 
+        case sel @ Select(obj, _) =>
+          // problem pattern 2: invoke getter which also has setter
+          log(s"checking select of ${sel.symbol.name}")
+          log(s"getter of object: ${isGetterOfObjectWithSetter(sel.symbol)}")
+
+          checkPattern(2)
+          if (isGetterOfObjectWithSetter(sel.symbol) && currentMethods.nonEmpty /*TODO*/) {
+            insecureMethods = insecureMethods + currentMethods.head
+            mkInsecure(currentMethods.head.owner)
+            addPattern(2)
+          }
+
+          traverse(obj)
+
+        case Literal(any) => /* all good */
+
         case unhandled =>
           log(s"unhandled tree $tree")
           log(s"raw:\n${showRaw(tree)}")
@@ -214,7 +235,7 @@ class Plugin(val global: Global) extends NscPlugin {
             if (PluginComponent.insecureClasses.nonEmpty) {
               val classNames = PluginComponent.insecureClasses.map(cls => cls.toString)
               log(s"""error: insecure classes: ${classNames.mkString(",")}""")
-              //error(s"""insecure classes: ${classNames.mkString(",")}""")
+              error(s"""insecure classes: ${classNames.mkString(",")}""")
             }
           }
       }

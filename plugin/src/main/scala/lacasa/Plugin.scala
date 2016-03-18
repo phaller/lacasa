@@ -69,7 +69,7 @@ class Plugin(val global: Global) extends NscPlugin {
 
     var insecureClasses: Set[Symbol] = Set()
     // inheriting from `scala.AnyRef' is secure
-    var secureClasses: Set[Symbol] = Set(AnyRefClass, ObjectClass)
+    var secureClasses: Set[Symbol] = Set(AnyRefClass, ObjectClass, SerializableClass, JavaSerializableClass)
 
     // invariant: \forall s \in deps(c). !isKnown(s)
     var deps: Map[Symbol, List[Symbol]] = Map()
@@ -80,7 +80,7 @@ class Plugin(val global: Global) extends NscPlugin {
     var insecureMethods: Set[Symbol] = Set()
 
     def isKnown(cls: Symbol): Boolean =
-      insecureClasses.contains(cls) || secureClasses.contains(cls)
+      insecureClasses.contains(cls) || secureClasses.contains(cls) || secureStrictClassNames.contains(cls.name.toString)
 
     def isKnownMutable(obj: Symbol): Boolean =
       mutableObjects.contains(obj)
@@ -108,21 +108,139 @@ class Plugin(val global: Global) extends NscPlugin {
 
     def isGetterOfObjectWithSetter(method: Symbol): Boolean = {
       method.owner.isModuleClass && method.isGetter &&
-      method.setterIn(method.owner) != NoSymbol
+      method.setter(method.owner) != NoSymbol
     }
 
     def dependOn(cls: Symbol, method: Symbol, other: Symbol): Unit = {
       if (isKnown(other) && insecureClasses.contains(other)) {
         insecureMethods = insecureMethods + method
         mkInsecure(cls)
-      } else if (!isKnown(other)) {
+      } else if (other != cls && !isKnown(other)) {
         val currentDeps = deps.getOrElse(cls, List[Symbol]())
         if (!currentDeps.contains(other))
           deps = deps + (cls -> (other :: currentDeps))
       }
     }
 
-    class ObjectCapabilitySecureTraverser(unit: CompilationUnit) extends Traverser {
+    //-------------//
+    // strict ocap //
+    //-------------//
+
+    var insecureStrictClasses: Set[Symbol] = Set()
+    // inheriting from `scala.AnyRef' is secure
+    var secureStrictClasses: Set[Symbol] = Set(AnyRefClass, ObjectClass, SerializableClass, JavaSerializableClass)
+    var secureStrictClassNames: Set[String] = Set("Product")
+
+    val secureStrictModules: Set[Symbol] = Set(ScalaRunTimeModule.moduleClass)
+
+    // invariant: \forall s \in depsStrict(c). !isKnownStrict(s)
+    var depsStrict: Map[Symbol, List[Symbol]] = Map()
+
+    def isKnownStrict(cls: Symbol): Boolean =
+      insecureStrictClasses.contains(cls) || secureStrictClasses.contains(cls) || secureStrictClassNames.contains(cls.name.toString)
+
+    def mkInsecureStrict(cls: Symbol): Unit = {
+      if (depsStrict.isDefinedAt(cls))
+        depsStrict = depsStrict - cls
+
+      insecureStrictClasses = insecureStrictClasses + cls
+
+      // go through classes with unknown status (= keys in depsStrict)
+      // if `cls' is one of the values: make insecure
+      val newInsecure =
+        for ((cls1, itsDeps) <- depsStrict; if itsDeps.contains(cls)) yield cls1
+      for (cls1 <- newInsecure) mkInsecureStrict(cls1)
+    }
+
+    def dependStrictOn(cls: Symbol, other: Symbol): Unit = {
+      if (isKnownStrict(other) && insecureStrictClasses.contains(other)) {
+        mkInsecureStrict(cls)
+      } else if (other != cls && !isKnownStrict(other)) {
+        val currentDeps = depsStrict.getOrElse(cls, List[Symbol]())
+        if (!currentDeps.contains(other))
+          depsStrict = depsStrict + (cls -> (other :: currentDeps))
+      }
+    }
+
+    // uses isKnownStrict, insecureStrictClasses, mkInsecureStrict, depsStrict, dependStrictOn
+    class OcapStrictTraverser(unit: CompilationUnit) extends Traverser {
+      var currentMethods: List[Symbol] = List()
+      override def traverse(tree: Tree): Unit = tree match {
+
+        case templ @ Template(parents, self, body) =>
+          val cls = templ.symbol.owner
+          if (!cls.isModuleClass) {
+            log(s"STRICT: checking ${cls.fullName}")
+            if (parents.exists(parent => isKnownStrict(parent.symbol) && insecureStrictClasses.contains(parent.symbol))) {
+              log(s"STRICT: make insecure ${cls.fullName}")
+              mkInsecureStrict(cls)
+            } else {
+              if (parents.exists(parent => !isKnownStrict(parent.symbol))) {
+                log(s"STRICT: there is unknown parent of ${cls.fullName}!")
+                // for each unknown parent: create dependency
+                parents.foreach { parent =>
+                  val parentSym = parent.symbol
+                  if (!isKnownStrict(parentSym)) {
+                    val currentDeps = depsStrict.getOrElse(cls, List[Symbol]())
+                    if (!currentDeps.contains(parentSym))
+                      depsStrict = depsStrict + (cls -> (parentSym :: currentDeps))
+                  }
+                }
+              }
+            }
+          }
+          body.foreach(t => traverse(t))
+
+        case methodDef @ DefDef(mods, name, tparams, vparamss, tpt, rhs) =>
+          log(s"STRICT ${methodDef.symbol.name} checking method definition ${methodDef.symbol.name}")
+          log(s"STRICT raw:\n${showRaw(methodDef)}")
+          currentMethods = methodDef.symbol :: currentMethods
+          traverse(rhs)
+          currentMethods = currentMethods.tail
+
+        // STRICT: selecting member of object is insecure
+        case sel @ Select(obj, _) =>
+          if (currentMethods.nonEmpty && !currentMethods.head.owner.isModuleClass) {
+            if (secureStrictModules.contains(obj.symbol)) {
+              log(s"STRICT SECURE MODULE SELECTED ${obj.symbol}: $sel")
+            } else if (sel.symbol.owner.isModuleClass) {
+              log(s"STRICT INSECURE ${currentMethods.head.owner.name}: insecure selection on object: $sel")
+              mkInsecureStrict(currentMethods.head.owner)
+            }
+          }
+          traverse(obj)
+
+        // STRICT: instantiating insecure class is insecure
+        case New(id) =>
+          if (currentMethods.nonEmpty) {
+            val cls = currentMethods.head.owner
+            id match {
+              case tpt @ TypeTree() =>
+                // empty TypeTree: check original...
+                val orig = tpt.original
+                orig match {
+                  case AppliedTypeTree(classToCheck, tpeArgs) =>
+                    val tpeArgsToCheck = tpeArgs.map {
+                      case mt @ TypeTree() => mt.original
+                      case nonMt => nonMt
+                    }
+                    dependStrictOn(cls, classToCheck.symbol)
+                    tpeArgsToCheck.foreach(tparg => if (!tparg.symbol.isAbstractType) dependStrictOn(cls, tparg.symbol))
+                  case _ => /* do nothing */
+                }
+
+              case other =>
+                // non-empty TypeTree: check its symbol directly
+                dependStrictOn(cls, other.symbol)
+            }
+          }
+
+        case _ =>
+          super.traverse(tree)
+      }
+    }
+
+    class OcapTraverser(unit: CompilationUnit) extends Traverser {
       var currentMethods: List[Symbol] = List()
 
       override def traverse(tree: Tree): Unit = tree match {
@@ -190,21 +308,25 @@ class Plugin(val global: Global) extends NscPlugin {
           // problem pattern 3: fun is method of mutable object
           checkPattern(3)
           val ownerOpt = ownerObject(fun.symbol)
-          log(s"ownerIsObject: ${ownerOpt.nonEmpty}")
+          log(s"ownerIsObject: $ownerOpt")
           if (ownerOpt.nonEmpty && currentMethods.nonEmpty /*TODO*/ &&
               !currentMethods.head.owner.isModuleClass) {
             val owner = ownerOpt.get
-            val cls = currentMethods.head.owner
-            log(s"owner isKnownMutable: ${isKnownMutable(owner)}")
-            if (!isKnownMutable(owner)) {
-              val currentDeps = depsGlobal.getOrElse(cls, List[Symbol]())
-              if (!currentDeps.contains(owner))
-                depsGlobal = depsGlobal + (cls -> (owner :: currentDeps))
-              log(s"added global dep on ${owner.name}")
+            if (secureStrictModules.contains(owner)) {
+              log(s"STRICT SECURE MODULE SELECTED $owner: $fun")
             } else {
-              insecureMethods = insecureMethods + currentMethods.head
-              mkInsecure(cls)
-              addPattern(3)
+              val cls = currentMethods.head.owner
+              log(s"owner isKnownMutable: ${isKnownMutable(owner)}")
+              if (!isKnownMutable(owner)) {
+                val currentDeps = depsGlobal.getOrElse(cls, List[Symbol]())
+                if (!currentDeps.contains(owner))
+                  depsGlobal = depsGlobal + (cls -> (owner :: currentDeps))
+                log(s"added global dep on ${owner.name}")
+              } else {
+                insecureMethods = insecureMethods + currentMethods.head
+                mkInsecure(cls)
+                addPattern(3)
+              }
             }
           }
 
@@ -244,7 +366,7 @@ class Plugin(val global: Global) extends NscPlugin {
                       case nonMt => nonMt
                     }
                     dependOn(cls, currentMethods.head, classToCheck.symbol)
-                    tpeArgsToCheck.foreach(tparg => dependOn(cls, currentMethods.head, tparg.symbol))
+                    tpeArgsToCheck.foreach(tparg => if (!tparg.symbol.isAbstractType) dependOn(cls, currentMethods.head, tparg.symbol))
 
                   case _ => /* do nothing */
                 }
@@ -264,16 +386,19 @@ class Plugin(val global: Global) extends NscPlugin {
       }
     }
 
-    class ObjectCapabilitySecurePhase(prev: Phase) extends StdPhase(prev) {
+    class OcapPhase(prev: Phase) extends StdPhase(prev) {
       override def apply(unit: CompilationUnit): Unit = {
-        log("applying LaCasa ObjectCapabilitySecurePhase...")
-        val ocst = new ObjectCapabilitySecureTraverser(unit)
+        log("applying LaCasa OcapPhase...")
+        val oct = new OcapTraverser(unit)
+        oct.traverse(unit.body)
+
+        val ocst = new OcapStrictTraverser(unit)
         ocst.traverse(unit.body)
       }
     }
 
     override def newPhase(prev: Phase): StdPhase =
-      new ObjectCapabilitySecurePhase(prev)
+      new OcapPhase(prev)
   }
 
   object ReporterComponent extends NscPluginComponent {
@@ -304,6 +429,14 @@ class Plugin(val global: Global) extends NscPlugin {
 
             reporter.echo(s"patterns checked: ${PluginComponent.patternsChecked}")
             reporter.echo(s"patterns found: ${PluginComponent.patterns}")
+
+            reporter.echo(s"#insecure classes: ${PluginComponent.insecureClasses.size}")
+            reporter.echo("insecure classes:")
+            PluginComponent.insecureClasses.foreach { cls => reporter.echo(cls.fullName) }
+
+            reporter.echo(s"#strict insecure classes: ${PluginComponent.insecureStrictClasses.size}")
+            reporter.echo("strict insecure classes:")
+            PluginComponent.insecureStrictClasses.foreach { cls => reporter.echo(cls.fullName) }
 
             //reporter.warning(NoPosition, "reporter.warning: LaCasa plugin ran successfully")
 

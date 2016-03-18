@@ -195,4 +195,22 @@ class C(x: Int) {
     }
   }
 
+  @Test
+  def test11() {
+    expectError("class C") {
+      """
+case class SignalMessageWithSourceId[@specialized(Int, Long) Id, Signal](
+  val targetId: Id,
+  val sourceId: Id,
+  val signal: Signal)
+object C {
+  var danger = 5
+}
+class C(x: Int) {
+  def m(y: Int): Unit = {
+    val v1 = C.danger + x + y
+  }
+}"""
+    }
+  }
 }

@@ -79,4 +79,38 @@ class C {
     }
   }
 
+  @Test
+  def test5() {
+    expectError("insecure") {
+      """
+class C {
+  val f = 5
+  def m(x: Int): Unit = {
+    val v1 = C.someMethod(5)
+  }
+}
+object C {
+  var danger = 5
+  def someMethod(x: Int) = x + danger
+}"""
+    }
+  }
+
+  @Test
+  def test6() {
+    expectError("insecure") {
+      """
+object C {
+  var danger = 5
+  def someMethod(x: Int) = x + danger
+}
+class C {
+  val f = 5
+  def m(x: Int): Unit = {
+    val v1 = C.someMethod(5)
+  }
+}"""
+    }
+  }
+
 }

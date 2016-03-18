@@ -45,8 +45,15 @@ class Plugin(val global: Global) extends NscPlugin {
       analyzedTempls += sym
 
     var mutableObjects: Set[Symbol] = Set()
-    def addMutableObject(sym: Symbol): Unit =
+    def addMutableObject(sym: Symbol): Unit = {
       mutableObjects += sym
+
+      // go through classes with unknown status (= keys in depsGlobal)
+      // if `sym' is one of the values: make insecure
+      val newInsecure =
+        for ((cls1, itsDeps) <- depsGlobal; if itsDeps.contains(sym)) yield cls1
+      for (cls1 <- newInsecure) mkInsecure(cls1)
+    }
 
     var patterns: Map[Int, Int] = Map()
     def addPattern(num: Int): Unit = {
@@ -63,11 +70,18 @@ class Plugin(val global: Global) extends NscPlugin {
     var insecureClasses: Set[Symbol] = Set()
     // inheriting from `scala.AnyRef' is secure
     var secureClasses: Set[Symbol] = Set(AnyRefClass, ObjectClass)
+
     // invariant: \forall s \in deps(c). !isKnown(s)
     var deps: Map[Symbol, List[Symbol]] = Map()
 
+    // invariant: \forall s \in depsGlobal(c). !isKnownMutable(s)
+    var depsGlobal: Map[Symbol, List[Symbol]] = Map()
+
     def isKnown(cls: Symbol): Boolean =
       insecureClasses.contains(cls) || secureClasses.contains(cls)
+
+    def isKnownMutable(obj: Symbol): Boolean =
+      mutableObjects.contains(obj)
 
     def addInsecureClass(cls: Symbol): Unit =
       insecureClasses = insecureClasses + cls
@@ -75,7 +89,11 @@ class Plugin(val global: Global) extends NscPlugin {
     def mkInsecure(cls: Symbol): Unit = {
       if (deps.isDefinedAt(cls))
         deps = deps - cls
+      if (depsGlobal.isDefinedAt(cls))
+        depsGlobal = depsGlobal - cls
+
       addInsecureClass(cls)
+
       // go through classes with unknown status (= keys in deps)
       // if `cls' is one of the values: make insecure
       val newInsecure =
@@ -144,13 +162,38 @@ class Plugin(val global: Global) extends NscPlugin {
         case app @ Apply(fun, args) =>
           // problem pattern 1: fun is setter of an object
           log(s"checking apply of ${fun.symbol.name}")
-          log(s"setter of object: ${isSetterOfObject(fun.symbol)}")
 
+          log(s"setter of object: ${isSetterOfObject(fun.symbol)}")
           checkPattern(1)
-          if (isSetterOfObject(fun.symbol) && currentMethods.nonEmpty /*TODO*/) {
+          if (isSetterOfObject(fun.symbol) && currentMethods.nonEmpty /*TODO*/ &&
+              !currentMethods.head.owner.isModuleClass) {
             insecureMethods = insecureMethods + currentMethods.head
             mkInsecure(currentMethods.head.owner)
             addPattern(1)
+          }
+
+          def ownerObject(method: Symbol): Option[Symbol] =
+            if (method.owner.isModuleClass) Some(method.owner) else None
+
+          // problem pattern 3: fun is method of mutable object
+          checkPattern(3)
+          val ownerOpt = ownerObject(fun.symbol)
+          log(s"ownerIsObject: ${ownerOpt.nonEmpty}")
+          if (ownerOpt.nonEmpty && currentMethods.nonEmpty /*TODO*/ &&
+              !currentMethods.head.owner.isModuleClass) {
+            val owner = ownerOpt.get
+            val cls = currentMethods.head.owner
+            log(s"owner isKnownMutable: ${isKnownMutable(owner)}")
+            if (!isKnownMutable(owner)) {
+              val currentDeps = depsGlobal.getOrElse(cls, List[Symbol]())
+              if (!currentDeps.contains(owner))
+                depsGlobal = depsGlobal + (cls -> (owner :: currentDeps))
+              log(s"added global dep on ${owner.name}")
+            } else {
+              insecureMethods = insecureMethods + currentMethods.head
+              mkInsecure(cls)
+              addPattern(3)
+            }
           }
 
           traverse(fun)
@@ -162,7 +205,8 @@ class Plugin(val global: Global) extends NscPlugin {
           log(s"getter of object: ${isGetterOfObjectWithSetter(sel.symbol)}")
 
           checkPattern(2)
-          if (isGetterOfObjectWithSetter(sel.symbol) && currentMethods.nonEmpty /*TODO*/) {
+          if (isGetterOfObjectWithSetter(sel.symbol) && currentMethods.nonEmpty /*TODO*/ &&
+              !currentMethods.head.owner.isModuleClass) {
             insecureMethods = insecureMethods + currentMethods.head
             mkInsecure(currentMethods.head.owner)
             addPattern(2)
@@ -230,6 +274,11 @@ class Plugin(val global: Global) extends NscPlugin {
             if (PluginComponent.deps.keySet.nonEmpty) {
               log("\nunresolved dependencies:")
               log(PluginComponent.deps.toString)
+            }
+
+            if (PluginComponent.depsGlobal.keySet.nonEmpty) {
+              log("\nunresolved global dependencies:")
+              log(PluginComponent.depsGlobal.toString)
             }
 
             if (PluginComponent.insecureClasses.nonEmpty) {

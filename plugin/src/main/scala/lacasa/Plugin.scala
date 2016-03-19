@@ -131,7 +131,11 @@ class Plugin(val global: Global) extends NscPlugin {
     var secureStrictClasses: Set[Symbol] = Set(AnyRefClass, ObjectClass, SerializableClass, JavaSerializableClass)
     var secureStrictClassNames: Set[String] = Set("Product")
 
-    val secureStrictModules: Set[Symbol] = Set(ScalaRunTimeModule.moduleClass)
+    val mathPackage   = rootMirror.getPackage(TermName("scala.math"))
+    val numericModule = rootMirror.getModuleByName(TermName("scala.math.Numeric"))
+    val staticsModule = rootMirror.getModuleByName(TermName("scala.runtime.Statics"))
+    val cbf           = rootMirror.getClassByName(TermName("scala.collection.generic.CanBuildFrom"))
+    val secureStrictModules: Set[Symbol] = Set(ScalaRunTimeModule.moduleClass, RuntimePackage.moduleClass, ScalaPackageClass, PredefModule.moduleClass, mathPackage.moduleClass, numericModule.moduleClass, staticsModule.moduleClass)
 
     // invariant: \forall s \in depsStrict(c). !isKnownStrict(s)
     var depsStrict: Map[Symbol, List[Symbol]] = Map()
@@ -162,8 +166,38 @@ class Plugin(val global: Global) extends NscPlugin {
       }
     }
 
+    val debugName = "AggregationOperation"
+
+    abstract class TypingTraverser(unit: CompilationUnit) extends Traverser {
+      var localTyper: analyzer.Typer =
+        analyzer.newTyper(analyzer.rootContextPostTyper(unit, EmptyTree))
+      protected var curTree: Tree = _
+
+      override final def atOwner(owner: Symbol)(trans: => Unit): Unit = atOwner(curTree, owner)(trans)
+
+      def atOwner(tree: Tree, owner: Symbol)(trans: => Unit): Unit = {
+        val savedLocalTyper = localTyper
+        localTyper = localTyper.atOwner(tree, if (owner.isModule) owner.moduleClass else owner)
+        super.atOwner(owner)(trans)
+        localTyper = savedLocalTyper
+      }
+
+      override def traverse(tree: Tree): Unit = {
+        curTree = tree
+        tree match {
+          case Template(_, _, _) =>
+            // enter template into context chain
+            atOwner(currentOwner) { super.traverse(tree) }
+          case PackageDef(_, _) =>
+            atOwner(tree.symbol) { super.traverse(tree) }
+          case _ =>
+            super.traverse(tree)
+        }
+      }
+    }
+
     // uses isKnownStrict, insecureStrictClasses, mkInsecureStrict, depsStrict, dependStrictOn
-    class OcapStrictTraverser(unit: CompilationUnit) extends Traverser {
+    class OcapStrictTraverser(unit: CompilationUnit) extends TypingTraverser(unit) {
       var currentMethods: List[Symbol] = List()
       override def traverse(tree: Tree): Unit = tree match {
 
@@ -173,6 +207,8 @@ class Plugin(val global: Global) extends NscPlugin {
             log(s"STRICT: checking ${cls.fullName}")
             if (parents.exists(parent => isKnownStrict(parent.symbol) && insecureStrictClasses.contains(parent.symbol))) {
               log(s"STRICT: make insecure ${cls.fullName}")
+              if (cls.name.toString.startsWith(debugName))
+                println(s"LACASA: make insecure ${cls.name} because of insecure parent")
               mkInsecureStrict(cls)
             } else {
               if (parents.exists(parent => !isKnownStrict(parent.symbol))) {
@@ -181,6 +217,8 @@ class Plugin(val global: Global) extends NscPlugin {
                 parents.foreach { parent =>
                   val parentSym = parent.symbol
                   if (!isKnownStrict(parentSym)) {
+                    if (cls.name.toString.startsWith(debugName))
+                      println(s"LACASA: add dep for ${cls.name} on ${parentSym.name} because of inheritance")
                     val currentDeps = depsStrict.getOrElse(cls, List[Symbol]())
                     if (!currentDeps.contains(parentSym))
                       depsStrict = depsStrict + (cls -> (parentSym :: currentDeps))
@@ -199,20 +237,38 @@ class Plugin(val global: Global) extends NscPlugin {
           currentMethods = currentMethods.tail
 
         // STRICT: selecting member of object is insecure
-        case sel @ Select(obj, _) =>
+        case sel @ Select(obj, mem) =>
           if (currentMethods.nonEmpty && !currentMethods.head.owner.isModuleClass) {
-            if (secureStrictModules.contains(obj.symbol)) {
+            if (obj.symbol != null && (secureStrictModules.contains(obj.symbol) ||
+                secureStrictModules.contains(obj.symbol.moduleClass))) {
               log(s"STRICT SECURE MODULE SELECTED ${obj.symbol}: $sel")
             } else if (sel.symbol.owner.isModuleClass) {
-              log(s"STRICT INSECURE ${currentMethods.head.owner.name}: insecure selection on object: $sel")
-              mkInsecureStrict(currentMethods.head.owner)
+              val cls = currentMethods.head.owner
+
+              // if type of sel is CanBuildFrom we allow it
+              val isCBF = {
+                val cbfUseWithTypeArgs = sel.tpe.finalResultType
+                val cbfUseTypeSym = cbfUseWithTypeArgs.typeConstructor.typeSymbol
+                cbfUseTypeSym == cbf
+              }
+
+              if (!isCBF) {
+                log(s"STRICT INSECURE ${cls.name}: insecure selection on object: $sel")
+                if (cls.name.toString.startsWith(debugName)) {
+                  println(s"LACASA: marked ${cls.name} insecure because of selection $sel")
+                  println(s"""LACASA: obj.symbol = ${obj.symbol}, secureStrictMods = ${secureStrictModules.mkString(",")}""")
+                  println(s"LACASA: sel.symbol.owner = ${sel.symbol.owner.fullName}")
+                }
+                mkInsecureStrict(currentMethods.head.owner)
+              }
+            } else {
+              traverse(obj)
             }
           }
-          traverse(obj)
 
         // STRICT: instantiating insecure class is insecure
-        case New(id) =>
-          if (currentMethods.nonEmpty) {
+        case nt @ New(id) =>
+          if (currentMethods.nonEmpty && !currentMethods.head.owner.isModuleClass) {
             val cls = currentMethods.head.owner
             id match {
               case tpt @ TypeTree() =>
@@ -224,14 +280,30 @@ class Plugin(val global: Global) extends NscPlugin {
                       case mt @ TypeTree() => mt.original
                       case nonMt => nonMt
                     }
-                    dependStrictOn(cls, classToCheck.symbol)
-                    tpeArgsToCheck.foreach(tparg => if (!tparg.symbol.isAbstractType) dependStrictOn(cls, tparg.symbol))
+
+                    if (classToCheck.symbol != cls) {
+                      if (cls.name.toString.startsWith(debugName))
+                        println(s"LACASA: add dep new-1 for ${cls.name} on ${classToCheck.symbol.name} because of $nt")
+                      dependStrictOn(cls, classToCheck.symbol)
+                    }
+
+                    tpeArgsToCheck.foreach { tparg =>
+                      if (tparg != null && tparg.symbol != null && !tparg.symbol.isAbstractType) {
+                        if (cls.name.toString.startsWith(debugName))
+                          println(s"LACASA: add dep new-2 for ${cls.name} on ${tparg.symbol.name} because of $nt")
+                        dependStrictOn(cls, tparg.symbol)
+                      }
+                    }
                   case _ => /* do nothing */
                 }
 
               case other =>
                 // non-empty TypeTree: check its symbol directly
-                dependStrictOn(cls, other.symbol)
+                if (other.symbol != cls) {
+                  if (cls.name.toString.startsWith(debugName))
+                    println(s"LACASA: add dep new-3 for ${cls.name} on ${other.symbol.name} because of $nt")
+                  dependStrictOn(cls, other.symbol)
+                }
             }
           }
 
@@ -366,7 +438,10 @@ class Plugin(val global: Global) extends NscPlugin {
                       case nonMt => nonMt
                     }
                     dependOn(cls, currentMethods.head, classToCheck.symbol)
-                    tpeArgsToCheck.foreach(tparg => if (!tparg.symbol.isAbstractType) dependOn(cls, currentMethods.head, tparg.symbol))
+                    tpeArgsToCheck.foreach { tparg =>
+                      if (tparg != null && tparg.symbol != null && !tparg.symbol.isAbstractType)
+                        dependOn(cls, currentMethods.head, tparg.symbol)
+                    }
 
                   case _ => /* do nothing */
                 }

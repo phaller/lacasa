@@ -358,10 +358,13 @@ class Plugin(val global: Global) extends NscPlugin {
         // STRICT: selecting member of object is insecure
         case sel @ Select(obj, mem) =>
           if (currentMethods.nonEmpty && !currentMethods.head.owner.isModuleClass) {
-            if (/*secureStrictModules.contains(sel.symbol.owner)*/
-                okModules.contains(sel.symbol.owner.fullName.toString)) {
+            val potentialMod = sel.symbol.owner
+            if (potentialMod.isModuleClass && potentialMod.isSynthetic) {
+              // synthetic modules are secure, do nothing
+            } else if (/*secureStrictModules.contains(sel.symbol.owner)*/
+                okModules.contains(potentialMod.fullName.toString)) {
               log(s"STRICT SECURE MODULE SELECTED ${obj.symbol}: $sel")
-            } else if (sel.symbol.owner.isModuleClass) {
+            } else if (potentialMod.isModuleClass) {
               val cls = currentMethods.head.owner
 
               // if type of sel is CanBuildFrom we allow it
@@ -380,7 +383,7 @@ class Plugin(val global: Global) extends NscPlugin {
                 }
                 mkInsecureStrict(cls)
                 classesAccessingObjects += cls
-                accessedObjects += sel.symbol.owner.fullName.toString
+                accessedObjects += potentialMod.fullName.toString
               }
             } else {
               traverse(obj)

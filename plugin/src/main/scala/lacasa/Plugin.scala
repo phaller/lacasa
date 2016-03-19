@@ -135,7 +135,53 @@ class Plugin(val global: Global) extends NscPlugin {
     val numericModule = rootMirror.getModuleByName(TermName("scala.math.Numeric"))
     val staticsModule = rootMirror.getModuleByName(TermName("scala.runtime.Statics"))
     val cbf           = rootMirror.getClassByName(TermName("scala.collection.generic.CanBuildFrom"))
-    val secureStrictModules: Set[Symbol] = Set(ScalaRunTimeModule.moduleClass, RuntimePackage.moduleClass, ScalaPackageClass, PredefModule.moduleClass, mathPackage.moduleClass, numericModule.moduleClass, staticsModule.moduleClass)
+    val secureScalaModules: Set[Symbol] = Set(
+      rootMirror.getModuleByName(TermName("scala.Array")),
+      rootMirror.getModuleByName(TermName("scala.reflect.ClassTag")),
+      rootMirror.getModuleByName(TermName("scala.reflect.ManifestFactory")),
+      rootMirror.getModuleByName(TermName("scala.reflect.runtime.package")),
+      rootMirror.getModuleByName(TermName("scala.math.package")),
+      rootMirror.getModuleByName(TermName("scala.math.Ordering"))
+    )
+
+    val secureScalaCollectionModules: Set[Symbol] = Set(
+      rootMirror.getModuleByName(TermName("scala.collection")),
+      rootMirror.getModuleByName(TermName("scala.collection.Iterator")),
+      rootMirror.getModuleByName(TermName("scala.collection.immutable")),
+      rootMirror.getModuleByName(TermName("scala.collection.immutable.List")),
+      rootMirror.getModuleByName(TermName("scala.collection.immutable.Map")),
+      rootMirror.getModuleByName(TermName("scala.collection.immutable.Stream")),
+      rootMirror.getModuleByName(TermName("scala.collection.immutable.Stream.cons"))
+    )
+
+    val secureScalaLibraryModules: Set[Symbol] = Set(
+      rootMirror.getModuleByName(TermName("scala.Option")),
+      rootMirror.getModuleByName(TermName("scala.util")),
+      rootMirror.getModuleByName(TermName("scala.util.Sorting")),
+      rootMirror.getModuleByName(TermName("scala.util.control.NonFatal")),
+      rootMirror.getModuleByName(TermName("scala.io")),
+      rootMirror.getModuleByName(TermName("scala.io.Source")),
+      rootMirror.getModuleByName(TermName("scala.sys.package")),
+      rootMirror.getModuleByName(TermName("scala.concurrent.Future")),
+      rootMirror.getModuleByName(TermName("scala.concurrent.Await")),
+      rootMirror.getModuleByName(TermName("scala.concurrent.ExecutionContext.Implicits")),
+      rootMirror.getModuleByName(TermName("scala.concurrent.duration.package")),
+      rootMirror.getModuleByName(TermName("scala.concurrent.duration.Duration"))
+    )
+
+    val secureJavaModules: Set[Symbol] = Set(
+      rootMirror.getModuleByName(TermName("java.lang.Runtime")),
+      rootMirror.getModuleByName(TermName("java.lang.System")),
+      rootMirror.getModuleByName(TermName("java.lang.Thread")),
+      rootMirror.getModuleByName(TermName("java.lang.Class")),
+      rootMirror.getModuleByName(TermName("java.lang.Void"))
+    )
+
+    val secureStrictModules: Set[Symbol] = Set(ScalaRunTimeModule.moduleClass, RuntimePackage.moduleClass, ScalaPackageClass, PredefModule.moduleClass, mathPackage.moduleClass, numericModule.moduleClass, staticsModule.moduleClass) ++
+      secureScalaModules.map(_.moduleClass) ++
+      secureScalaCollectionModules.map(_.moduleClass) ++
+      secureScalaLibraryModules.map(_.moduleClass) ++
+      secureJavaModules.map(_.moduleClass)
 
     // invariant: \forall s \in depsStrict(c). !isKnownStrict(s)
     var depsStrict: Map[Symbol, List[Symbol]] = Map()
@@ -196,6 +242,9 @@ class Plugin(val global: Global) extends NscPlugin {
       }
     }
 
+    var classesAccessingObjects: Set[Symbol] = Set()
+    var accessedObjects: Set[String] = Set()
+
     // uses isKnownStrict, insecureStrictClasses, mkInsecureStrict, depsStrict, dependStrictOn
     class OcapStrictTraverser(unit: CompilationUnit) extends TypingTraverser(unit) {
       var currentMethods: List[Symbol] = List()
@@ -239,8 +288,7 @@ class Plugin(val global: Global) extends NscPlugin {
         // STRICT: selecting member of object is insecure
         case sel @ Select(obj, mem) =>
           if (currentMethods.nonEmpty && !currentMethods.head.owner.isModuleClass) {
-            if (obj.symbol != null && (secureStrictModules.contains(obj.symbol) ||
-                secureStrictModules.contains(obj.symbol.moduleClass))) {
+            if (secureStrictModules.contains(sel.symbol.owner)) {
               log(s"STRICT SECURE MODULE SELECTED ${obj.symbol}: $sel")
             } else if (sel.symbol.owner.isModuleClass) {
               val cls = currentMethods.head.owner
@@ -259,7 +307,9 @@ class Plugin(val global: Global) extends NscPlugin {
                   println(s"""LACASA: obj.symbol = ${obj.symbol}, secureStrictMods = ${secureStrictModules.mkString(",")}""")
                   println(s"LACASA: sel.symbol.owner = ${sel.symbol.owner.fullName}")
                 }
-                mkInsecureStrict(currentMethods.head.owner)
+                mkInsecureStrict(cls)
+                classesAccessingObjects += cls
+                accessedObjects += sel.symbol.owner.fullName.toString
               }
             } else {
               traverse(obj)
@@ -271,8 +321,7 @@ class Plugin(val global: Global) extends NscPlugin {
           if (currentMethods.nonEmpty && !currentMethods.head.owner.isModuleClass) {
             val cls = currentMethods.head.owner
             id match {
-              case tpt @ TypeTree() =>
-                // empty TypeTree: check original...
+              case tpt @ TypeTree() => // empty TypeTree: check original...
                 val orig = tpt.original
                 orig match {
                   case AppliedTypeTree(classToCheck, tpeArgs) =>
@@ -297,8 +346,7 @@ class Plugin(val global: Global) extends NscPlugin {
                   case _ => /* do nothing */
                 }
 
-              case other =>
-                // non-empty TypeTree: check its symbol directly
+              case other => // non-empty TypeTree: check its symbol directly
                 if (other.symbol != cls) {
                   if (cls.name.toString.startsWith(debugName))
                     println(s"LACASA: add dep new-3 for ${cls.name} on ${other.symbol.name} because of $nt")
@@ -488,6 +536,8 @@ class Plugin(val global: Global) extends NscPlugin {
 
     override def newPhase(prev: Phase): StdPhase =
       new StdPhase(prev) {
+        import PluginComponent._
+
         override def apply(unit: CompilationUnit): Unit =
           if (!hasRun) {
             hasRun = true
@@ -510,6 +560,13 @@ class Plugin(val global: Global) extends NscPlugin {
             PluginComponent.insecureClasses.foreach { cls => reporter.echo(cls.fullName) }
 
             reporter.echo(s"#strict insecure classes: ${PluginComponent.insecureStrictClasses.size}")
+            reporter.echo(s"#classes insecure due to object accesses: ${classesAccessingObjects.size}")
+            reporter.echo(s"accessed objects:")
+            accessedObjects.foreach { obj => reporter.echo(obj) }
+
+            reporter.echo("################################")
+            reporter.echo("################################")
+            reporter.echo("################################")
             reporter.echo("strict insecure classes:")
             PluginComponent.insecureStrictClasses.foreach { cls => reporter.echo(cls.fullName) }
 

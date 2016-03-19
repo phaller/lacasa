@@ -131,10 +131,12 @@ class Plugin(val global: Global) extends NscPlugin {
     var secureStrictClasses: Set[Symbol] = Set(AnyRefClass, ObjectClass, SerializableClass, JavaSerializableClass)
     var secureStrictClassNames: Set[String] = Set("Product")
 
-    val mathPackage   = rootMirror.getPackage(TermName("scala.math"))
+    val cbf = rootMirror.getClassByName(TermName("scala.collection.generic.CanBuildFrom"))
+
+    /*val mathPackage   = rootMirror.getPackage(TermName("scala.math"))
     val numericModule = rootMirror.getModuleByName(TermName("scala.math.Numeric"))
     val staticsModule = rootMirror.getModuleByName(TermName("scala.runtime.Statics"))
-    val cbf           = rootMirror.getClassByName(TermName("scala.collection.generic.CanBuildFrom"))
+
     val secureScalaModules: Set[Symbol] = Set(
       rootMirror.getModuleByName(TermName("scala.Array")),
       rootMirror.getModuleByName(TermName("scala.reflect.ClassTag")),
@@ -142,22 +144,52 @@ class Plugin(val global: Global) extends NscPlugin {
       rootMirror.getModuleIfDefined(TermName("scala.reflect.runtime.package")),
       rootMirror.getModuleIfDefined(TermName("scala.math.package")),
       rootMirror.getModuleIfDefined(TermName("scala.math.Ordering"))
-    )
+    )*/
 
-    val okScalaModules: Set[String] = Set(
+    val okScalaRuntimeModules: Set[String] = Set(
       "scala",
-      "scala.Predef",
-      "scala.runtime.ScalaRunTime",
+      "scala.package",
+      "scala.Int",
       "scala.Array",
+      "scala.Function",
+      "scala.PartialFunction",
+      "scala.Symbol",
+      "scala.StringContext",
+      "scala.Specializable",
+      "scala.Predef",
+      "scala.Predef.Ensuring",
+      "scala.Predef.any2stringadd",
+      "scala.Predef.StringAdd",
+      "scala.Predef.StringFormat",
+      "scala.Predef.DummyImplicit",
+      "scala.Predef.RichException",
+      "scala.Predef.ArrowAssoc",
+      "scala.runtime.ScalaRunTime",
+      "scala.runtime.StringAdd",
+      "scala.runtime.Tuple2Zipped",
+      "scala.runtime.Tuple2Zipped.Ops",
+      "scala.runtime.Tuple3Zipped",
+      "scala.runtime.Tuple3Zipped.Ops",
+      "scala.runtime.RichByte",
+      "scala.runtime.RichShort",
+      "scala.runtime.RichInt",
+      "scala.runtime.RichLong",
+      "scala.runtime.RichChar",
+      "scala.runtime.RichFloat",
+      "scala.runtime.RichDouble",
+      "scala.runtime.StringFormat",
       "scala.runtime.Statics",
-      "scala.collection.generic.CanBuildFrom",
+      "scala.compat.Platform",
       "scala.reflect.ClassTag",
       "scala.reflect.ManifestFactory",
       "scala.reflect.runtime.package",
       "scala.math",
       "scala.math.package",
       "scala.math.Numeric",
-      "scala.math.Ordering"
+      "scala.math.Ordering",
+      "scala.math.Equiv",
+      "scala.math.BigDecimal",
+      "scala.collection.generic.CanBuildFrom"
     )
 
     /*val secureScalaCollectionModules: Set[Symbol] = Set(
@@ -210,13 +242,13 @@ class Plugin(val global: Global) extends NscPlugin {
       "scala.concurrent.duration.Duration"
     )
 
-    val secureJavaModules: Set[Symbol] = Set(
+    /*val secureJavaModules: Set[Symbol] = Set(
       rootMirror.getModuleByName(TermName("java.lang.Runtime")),
       rootMirror.getModuleByName(TermName("java.lang.System")),
       rootMirror.getModuleByName(TermName("java.lang.Thread")),
       rootMirror.getModuleByName(TermName("java.lang.Class")),
       rootMirror.getModuleByName(TermName("java.lang.Void"))
-    )
+    )*/
 
     val okJavaModules: Set[String] = Set(
       "java.lang.Runtime",
@@ -242,16 +274,17 @@ class Plugin(val global: Global) extends NscPlugin {
 
     val okModules =
       okJavaModules ++
-      okScalaModules ++
+      okScalaRuntimeModules ++
       okScalaLibraryModules ++
       okScalaCollectionModules
 
 
-    val secureStrictModules: Set[Symbol] = Set(ScalaRunTimeModule.moduleClass, RuntimePackage.moduleClass, ScalaPackageClass, PredefModule.moduleClass, mathPackage.moduleClass, numericModule.moduleClass, staticsModule.moduleClass) ++
+    /*val secureStrictModules: Set[Symbol] = Set(ScalaRunTimeModule.moduleClass, RuntimePackage.moduleClass, ScalaPackageClass, PredefModule.moduleClass, mathPackage.moduleClass, numericModule.moduleClass, staticsModule.moduleClass) ++
       secureScalaModules.map(_.moduleClass) ++
       //secureScalaCollectionModules.map(_.moduleClass) ++
       //secureScalaLibraryModules.map(_.moduleClass) ++
       secureJavaModules.map(_.moduleClass)
+     */
 
     // invariant: \forall s \in depsStrict(c). !isKnownStrict(s)
     var depsStrict: Map[Symbol, List[Symbol]] = Map()
@@ -378,7 +411,7 @@ class Plugin(val global: Global) extends NscPlugin {
                 log(s"STRICT INSECURE ${cls.name}: insecure selection on object: $sel")
                 if (cls.name.toString.startsWith(debugName)) {
                   println(s"LACASA: marked ${cls.name} insecure because of selection $sel")
-                  println(s"""LACASA: obj.symbol = ${obj.symbol}, secureStrictMods = ${secureStrictModules.mkString(",")}""")
+                  println(s"""LACASA: obj.symbol = ${obj.symbol}, okModules = ${okModules.mkString(",")}""")
                   println(s"LACASA: sel.symbol.owner = ${sel.symbol.owner.fullName}")
                 }
                 mkInsecureStrict(cls)
@@ -506,7 +539,8 @@ class Plugin(val global: Global) extends NscPlugin {
           if (ownerOpt.nonEmpty && currentMethods.nonEmpty /*TODO*/ &&
               !currentMethods.head.owner.isModuleClass) {
             val owner = ownerOpt.get
-            if (secureStrictModules.contains(owner)) {
+            if (/*secureStrictModules.contains(owner)*/
+                okModules.contains(owner.fullName.toString)) {
               log(s"STRICT SECURE MODULE SELECTED $owner: $fun")
             } else {
               val cls = currentMethods.head.owner

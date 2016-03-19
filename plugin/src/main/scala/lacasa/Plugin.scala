@@ -138,35 +138,76 @@ class Plugin(val global: Global) extends NscPlugin {
     val secureScalaModules: Set[Symbol] = Set(
       rootMirror.getModuleByName(TermName("scala.Array")),
       rootMirror.getModuleByName(TermName("scala.reflect.ClassTag")),
-      rootMirror.getModuleByName(TermName("scala.reflect.ManifestFactory")),
-      rootMirror.getModuleByName(TermName("scala.reflect.runtime.package")),
-      rootMirror.getModuleByName(TermName("scala.math.package")),
-      rootMirror.getModuleByName(TermName("scala.math.Ordering"))
+      rootMirror.getModuleIfDefined(TermName("scala.reflect.ManifestFactory")),
+      rootMirror.getModuleIfDefined(TermName("scala.reflect.runtime.package")),
+      rootMirror.getModuleIfDefined(TermName("scala.math.package")),
+      rootMirror.getModuleIfDefined(TermName("scala.math.Ordering"))
     )
 
-    val secureScalaCollectionModules: Set[Symbol] = Set(
-      rootMirror.getModuleByName(TermName("scala.collection")),
-      rootMirror.getModuleByName(TermName("scala.collection.Iterator")),
-      rootMirror.getModuleByName(TermName("scala.collection.immutable")),
-      rootMirror.getModuleByName(TermName("scala.collection.immutable.List")),
-      rootMirror.getModuleByName(TermName("scala.collection.immutable.Map")),
-      rootMirror.getModuleByName(TermName("scala.collection.immutable.Stream")),
-      rootMirror.getModuleByName(TermName("scala.collection.immutable.Stream.cons"))
+    val okScalaModules: Set[String] = Set(
+      "scala",
+      "scala.Predef",
+      "scala.runtime.ScalaRunTime",
+      "scala.Array",
+      "scala.runtime.Statics",
+      "scala.collection.generic.CanBuildFrom",
+      "scala.reflect.ClassTag",
+      "scala.reflect.ManifestFactory",
+      "scala.reflect.runtime.package",
+      "scala.math",
+      "scala.math.package",
+      "scala.math.Numeric",
+      "scala.math.Ordering"
     )
 
-    val secureScalaLibraryModules: Set[Symbol] = Set(
-      rootMirror.getModuleByName(TermName("scala.Option")),
-      rootMirror.getModuleByName(TermName("scala.util")),
-      rootMirror.getModuleByName(TermName("scala.util.Sorting")),
-      rootMirror.getModuleByName(TermName("scala.util.control.NonFatal")),
-      rootMirror.getModuleByName(TermName("scala.io")),
-      rootMirror.getModuleByName(TermName("scala.io.Source")),
-      rootMirror.getModuleByName(TermName("scala.sys.package")),
-      rootMirror.getModuleByName(TermName("scala.concurrent.Future")),
-      rootMirror.getModuleByName(TermName("scala.concurrent.Await")),
-      rootMirror.getModuleByName(TermName("scala.concurrent.ExecutionContext.Implicits")),
-      rootMirror.getModuleByName(TermName("scala.concurrent.duration.package")),
-      rootMirror.getModuleByName(TermName("scala.concurrent.duration.Duration"))
+    /*val secureScalaCollectionModules: Set[Symbol] = Set(
+      rootMirror.getModuleIfDefined(TermName("scala.collection")),
+      rootMirror.getModuleIfDefined(TermName("scala.collection.Iterator")),
+      rootMirror.getModuleIfDefined(TermName("scala.collection.immutable")),
+      rootMirror.getModuleIfDefined(TermName("scala.collection.immutable.List")),
+      rootMirror.getModuleIfDefined(TermName("scala.collection.immutable.Map")),
+      rootMirror.getModuleIfDefined(TermName("scala.collection.immutable.Stream")),
+      rootMirror.getModuleIfDefined(TermName("scala.collection.immutable.Stream.cons"))
+    )*/
+
+    val okScalaCollectionModules: Set[String] = Set(
+      "scala.collection",
+      "scala.collection.Iterator",
+      "scala.collection.immutable",
+      "scala.collection.immutable.List",
+      "scala.collection.immutable.Map",
+      "scala.collection.immutable.Stream",
+      "scala.collection.immutable.Stream.cons"
+    )
+
+    /*val secureScalaLibraryModules: Set[Symbol] = Set(
+      rootMirror.getModuleIfDefined(TermName("scala.Option")),
+      rootMirror.getModuleIfDefined(TermName("scala.util")),
+      rootMirror.getModuleIfDefined(TermName("scala.util.Sorting")),
+      rootMirror.getModuleIfDefined(TermName("scala.util.control.NonFatal")),
+      rootMirror.getModuleIfDefined(TermName("scala.io")),
+      rootMirror.getModuleIfDefined(TermName("scala.io.Source")),
+      rootMirror.getModuleIfDefined(TermName("scala.sys.package")),
+      rootMirror.getModuleIfDefined(TermName("scala.concurrent.Future")),
+      rootMirror.getModuleIfDefined(TermName("scala.concurrent.Await")),
+      rootMirror.getModuleIfDefined(TermName("scala.concurrent.ExecutionContext.Implicits")),
+      rootMirror.getModuleIfDefined(TermName("scala.concurrent.duration.package")),
+      rootMirror.getModuleIfDefined(TermName("scala.concurrent.duration.Duration"))
+    )*/
+
+    val okScalaLibraryModules: Set[String] = Set(
+      "scala.Option",
+      "scala.util",
+      "scala.util.Sorting",
+      "scala.util.control.NonFatal",
+      "scala.io",
+      "scala.io.Source",
+      "scala.sys.package",
+      "scala.concurrent.Future",
+      "scala.concurrent.Await",
+      "scala.concurrent.ExecutionContext.Implicits",
+      "scala.concurrent.duration.package",
+      "scala.concurrent.duration.Duration"
     )
 
     val secureJavaModules: Set[Symbol] = Set(
@@ -177,10 +218,39 @@ class Plugin(val global: Global) extends NscPlugin {
       rootMirror.getModuleByName(TermName("java.lang.Void"))
     )
 
+    val okJavaModules: Set[String] = Set(
+      "java.lang.Runtime",
+      "java.lang.System",
+      "java.lang.Thread",
+      "java.lang.Class",
+      "java.lang.Void",
+      "java.lang.Byte",
+      "java.lang.Short",
+      "java.lang.Integer",
+      "java.lang.Long",
+      "java.lang.Float",
+      "java.lang.Double",
+      "java.lang.Boolean",
+      "java.lang.Character",
+      "java.lang.String",
+      "scala.math.BigInt",
+      "java.lang.reflect.Array",
+      "java.util.Arrays",
+      "java.util.regex.Pattern",
+      "java.util.concurrent.atomic.AtomicReferenceFieldUpdater"
+    )
+
+    val okModules =
+      okJavaModules ++
+      okScalaModules ++
+      okScalaLibraryModules ++
+      okScalaCollectionModules
+
+
     val secureStrictModules: Set[Symbol] = Set(ScalaRunTimeModule.moduleClass, RuntimePackage.moduleClass, ScalaPackageClass, PredefModule.moduleClass, mathPackage.moduleClass, numericModule.moduleClass, staticsModule.moduleClass) ++
       secureScalaModules.map(_.moduleClass) ++
-      secureScalaCollectionModules.map(_.moduleClass) ++
-      secureScalaLibraryModules.map(_.moduleClass) ++
+      //secureScalaCollectionModules.map(_.moduleClass) ++
+      //secureScalaLibraryModules.map(_.moduleClass) ++
       secureJavaModules.map(_.moduleClass)
 
     // invariant: \forall s \in depsStrict(c). !isKnownStrict(s)
@@ -288,7 +358,8 @@ class Plugin(val global: Global) extends NscPlugin {
         // STRICT: selecting member of object is insecure
         case sel @ Select(obj, mem) =>
           if (currentMethods.nonEmpty && !currentMethods.head.owner.isModuleClass) {
-            if (secureStrictModules.contains(sel.symbol.owner)) {
+            if (/*secureStrictModules.contains(sel.symbol.owner)*/
+                okModules.contains(sel.symbol.owner.fullName.toString)) {
               log(s"STRICT SECURE MODULE SELECTED ${obj.symbol}: $sel")
             } else if (sel.symbol.owner.isModuleClass) {
               val cls = currentMethods.head.owner
@@ -561,6 +632,7 @@ class Plugin(val global: Global) extends NscPlugin {
 
             reporter.echo(s"#strict insecure classes: ${PluginComponent.insecureStrictClasses.size}")
             reporter.echo(s"#classes insecure due to object accesses: ${classesAccessingObjects.size}")
+            reporter.echo(s"#different accessed objects: ${accessedObjects.size}")
             reporter.echo(s"accessed objects:")
             accessedObjects.foreach { obj => reporter.echo(obj) }
 
@@ -590,7 +662,7 @@ class Plugin(val global: Global) extends NscPlugin {
             if (PluginComponent.insecureClasses.nonEmpty) {
               val classNames = PluginComponent.insecureClasses.map(cls => cls.toString)
               log(s"""error: insecure classes: ${classNames.mkString(",")}""")
-              error(s"""insecure classes: ${classNames.mkString(",")}""")
+              //error(s"""insecure classes: ${classNames.mkString(",")}""")
             }
           }
       }

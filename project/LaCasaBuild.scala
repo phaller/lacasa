@@ -30,7 +30,7 @@ object LaCasaBuild extends Build {
   )
 
   lazy val plugin = Project(
-    id   = "lacasa",
+    id   = "plugin",
     base = file("plugin")
   ) settings (
     commonSettings: _*
@@ -49,6 +49,13 @@ object LaCasaBuild extends Build {
       else
         Some("releases" at nexus + "service/local/staging/deploy/maven2")
     }
+  ) dependsOn(core)
+
+  lazy val core = Project(
+    id = "core",
+    base = file("core")
+  ) settings (
+    commonSettings: _*
   )
 
   lazy val usePluginSettings = Seq(
@@ -69,5 +76,12 @@ object LaCasaBuild extends Build {
     libraryDependencies <+= (scalaVersion)("org.scala-lang" % "scala-reflect" % _),
     publishArtifact in Compile := false
   )
+
+  lazy val samples = Project(
+    id   = "samples",
+    base = file("samples")
+  ) settings (
+    commonSettings ++ usePluginSettings: _*
+  ) dependsOn(core)
 
 }

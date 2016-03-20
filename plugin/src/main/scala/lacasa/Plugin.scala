@@ -12,7 +12,7 @@ class Plugin(val global: Global) extends NscPlugin {
   val description = "LaCasa plugin"
   val components = List[NscPluginComponent](PluginComponent, ReporterComponent)
 
-  val logEnabled = System.getProperty("lacasa.plugin.logging", "false") == "true"
+  val logEnabled = java.lang.System.getProperty("lacasa.plugin.logging", "false") == "true"
   def log(msg: => String): Unit = {
     if (logEnabled)
       println(msg)
@@ -131,7 +131,7 @@ class Plugin(val global: Global) extends NscPlugin {
     var secureStrictClasses: Set[Symbol] = Set(AnyRefClass, ObjectClass, SerializableClass, JavaSerializableClass)
     var secureStrictClassNames: Set[String] = Set("Product")
 
-    val cbf = rootMirror.getClassByName(TermName("scala.collection.generic.CanBuildFrom"))
+    val cbf = rootMirror.getClassByName(newTermName("scala.collection.generic.CanBuildFrom"))
 
     /*val mathPackage   = rootMirror.getPackage(TermName("scala.math"))
     val numericModule = rootMirror.getModuleByName(TermName("scala.math.Numeric"))
@@ -289,6 +289,11 @@ class Plugin(val global: Global) extends NscPlugin {
     // invariant: \forall s \in depsStrict(c). !isKnownStrict(s)
     var depsStrict: Map[Symbol, List[Symbol]] = Map()
 
+    // all type arguments to box[C] { ... } *must* be ocap, otherwise error!
+    var requiredOcapClasses: Set[Symbol] = Set()
+    val boxModule = rootMirror.getModuleByName(newTermName("lacasa.Box"))
+    val boxCreationMethod = boxModule.moduleClass.tpe.member(newTermName("box"))
+
     def isKnownStrict(cls: Symbol): Boolean =
       insecureStrictClasses.contains(cls) || secureStrictClasses.contains(cls) || secureStrictClassNames.contains(cls.name.toString)
 
@@ -317,7 +322,7 @@ class Plugin(val global: Global) extends NscPlugin {
 
     val debugName = "AggregationOperation"
 
-    abstract class TypingTraverser(unit: CompilationUnit) extends Traverser {
+    /*abstract class TypingTraverser(unit: CompilationUnit) extends Traverser {
       var localTyper: analyzer.Typer =
         analyzer.newTyper(analyzer.rootContextPostTyper(unit, EmptyTree))
       protected var curTree: Tree = _
@@ -343,13 +348,13 @@ class Plugin(val global: Global) extends NscPlugin {
             super.traverse(tree)
         }
       }
-    }
+    }*/
 
     var classesAccessingObjects: Set[Symbol] = Set()
     var accessedObjects: Set[String] = Set()
 
     // uses isKnownStrict, insecureStrictClasses, mkInsecureStrict, depsStrict, dependStrictOn
-    class OcapStrictTraverser(unit: CompilationUnit) extends TypingTraverser(unit) {
+    class OcapStrictTraverser(unit: CompilationUnit) extends Traverser {
       var currentMethods: List[Symbol] = List()
       override def traverse(tree: Tree): Unit = tree match {
 
@@ -387,6 +392,11 @@ class Plugin(val global: Global) extends NscPlugin {
           currentMethods = methodDef.symbol :: currentMethods
           traverse(rhs)
           currentMethods = currentMethods.tail
+
+        case TypeApply(fun, args) =>
+          // check for selection of box creation method: Box.box { ... }
+          if (fun.symbol == boxCreationMethod)
+            requiredOcapClasses += args.head.symbol
 
         // STRICT: selecting member of object is insecure
         case sel @ Select(obj, mem) =>
@@ -678,6 +688,11 @@ class Plugin(val global: Global) extends NscPlugin {
             reporter.echo("################################")
             reporter.echo("strict insecure classes:")
             PluginComponent.insecureStrictClasses.foreach { cls => reporter.echo(cls.fullName) }
+
+            requiredOcapClasses.foreach { cls =>
+              if (insecureStrictClasses.contains(cls))
+                error(s"$cls not ocap!")
+            }
 
             //reporter.warning(NoPosition, "reporter.warning: LaCasa plugin ran successfully")
 

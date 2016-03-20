@@ -294,6 +294,9 @@ class Plugin(val global: Global) extends NscPlugin {
     val boxModule = rootMirror.getModuleByName(newTermName("lacasa.Box"))
     val boxCreationMethod = boxModule.moduleClass.tpe.member(newTermName("box"))
 
+    val boxClass = rootMirror.getClassByName(newTermName("lacasa.Box"))
+    val boxOpenMethod = boxClass.tpe.member(newTermName("open"))
+
     def isKnownStrict(cls: Symbol): Boolean =
       insecureStrictClasses.contains(cls) || secureStrictClasses.contains(cls) || secureStrictClassNames.contains(cls.name.toString)
 
@@ -397,6 +400,39 @@ class Plugin(val global: Global) extends NscPlugin {
           // check for selection of box creation method: Box.box { ... }
           if (fun.symbol == boxCreationMethod)
             requiredOcapClasses += args.head.symbol
+
+        case Apply(fun, args) if fun.symbol == boxOpenMethod =>
+          val leakChecker = new Traverser {
+            override def traverse(tree: Tree): Unit = tree match {
+              case sel @ Select(obj, _) =>
+                val potentialMod = sel.symbol.owner
+                if (potentialMod.isModuleClass && potentialMod.isSynthetic) {
+                  // synthetic modules are secure, do nothing
+                } else if (okModules.contains(potentialMod.fullName.toString)) {
+                  log(s"STRICT SECURE MODULE SELECTED $potentialMod: $sel")
+                } else if (potentialMod.isModuleClass) {
+                  // if type of sel is CanBuildFrom we allow it
+                  val isCBF = {
+                    val cbfUseWithTypeArgs = sel.tpe.finalResultType
+                    val cbfUseTypeSym = cbfUseWithTypeArgs.typeConstructor.typeSymbol
+                    cbfUseTypeSym == cbf
+                  }
+
+                  if (!isCBF) {
+                    log(s"STRICT INSECURE: insecure selection on object: $sel")
+                    reporter.error(sel.pos, s"no access to top-level objects allowed!")
+                  }
+                } else {
+                  traverse(obj)
+                }
+              case other => super.traverse(other)
+            }
+          }
+          args.foreach {
+            case block @ Block(_, _) => leakChecker.traverse(block)
+            case _ => // do not traverse
+          }
+          traverse(fun)
 
         // STRICT: selecting member of object is insecure
         case sel @ Select(obj, mem) =>

@@ -2,6 +2,8 @@ package lacasa
 
 import scala.reflect.{ClassTag, classTag}
 
+import scala.spores._
+
 
 /*sealed*/ class CanAccess {
   type C
@@ -26,6 +28,12 @@ object Box {
   }
 }
 
+sealed trait OnlyNothing[T]
+
+object OnlyNothing {
+  implicit val onlyNothing: OnlyNothing[Nothing] = new OnlyNothing[Nothing] {}
+}
+
 sealed class Box[T] private (private val instance: T) {
   self =>
 
@@ -40,7 +48,7 @@ sealed class Box[T] private (private val instance: T) {
     }
   }
 
-  def open(fun: T => Unit)(implicit access: CanAccess { type C = self.C }): Box[T] = {
+  def open(fun: Spore[T, Unit])(implicit access: CanAccess { type C = self.C }, noCapture: OnlyNothing[fun.Captured]): Box[T] = {
     fun(instance)
     self
   }

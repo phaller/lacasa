@@ -6,17 +6,23 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import lacasa.{System, Box, CanAccess, Actor, ActorRef}
 import Box._
 
+import scala.spores._
+
+
+object SomeObject {
+  var fld: Array[Int] = _
+}
 
 class ActorA(next: ActorRef[C]) extends Actor[C] {
   def receive(msg: Box[C])(implicit access: CanAccess { type C = msg.C }): Unit = {
     println("ActorA received object with array")
-    msg.open { obj =>
+    msg.open(spore { (obj: C) =>
       // OK: update array
       obj.arr(0) = 100
 
       // NOT OK: leak array
-      // SomeObject.fld = obj.arr
-    }
+      //SomeObject.fld = obj.arr
+    })
     next.send(msg)
   }
 }
@@ -24,9 +30,9 @@ class ActorA(next: ActorRef[C]) extends Actor[C] {
 class ActorB extends Actor[C] {
   def receive(msg: Box[C])(implicit access: CanAccess { type C = msg.C }): Unit = {
     println("ActorB received object with array")
-    msg.open { x =>
+    msg.open(spore { (x: C) =>
       println(x.arr.mkString("[", ",", "]"))
-    }
+    })
   }
 }
 
@@ -48,14 +54,17 @@ object Transfer {
     val a = sys.actor[C](new ActorA(b))
 
     // LaCasa plugin checks that `C` is an ocap class
+    val x = 4
     box[C] { packed =>
       import packed.access
       val box: packed.box.type = packed.box
 
       // initialize object in box with new array
-      box.open { obj =>
-        obj.arr = Array(1, 2, 3, 4)
-      }
+      box.open(spore {
+        //val localX = x
+        (obj: C) =>
+          obj.arr = Array(1, 2, 3, 4/*localX*/)
+      })
 
       a.send(box)
 

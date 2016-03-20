@@ -291,9 +291,11 @@ class Plugin(val global: Global) extends NscPlugin {
 
     // all type arguments to box[C] { ... } *must* be ocap, otherwise error!
     var requiredOcapClasses: Set[Symbol] = Set()
+    def requireOcap(s: Symbol): Unit = {
+      requiredOcapClasses += s
+    }
     val boxModule = rootMirror.getModuleByName(newTermName("lacasa.Box"))
     val boxCreationMethod = boxModule.moduleClass.tpe.member(newTermName("box"))
-
     val boxClass = rootMirror.getClassByName(newTermName("lacasa.Box"))
     val boxOpenMethod = boxClass.tpe.member(newTermName("open"))
 
@@ -399,7 +401,7 @@ class Plugin(val global: Global) extends NscPlugin {
         case TypeApply(fun, args) =>
           // check for selection of box creation method: Box.box { ... }
           if (fun.symbol == boxCreationMethod)
-            requiredOcapClasses += args.head.symbol
+            requireOcap(args.head.symbol)
 
         case Apply(fun, args) if fun.symbol == boxOpenMethod =>
           val leakChecker = new Traverser {
@@ -417,7 +419,6 @@ class Plugin(val global: Global) extends NscPlugin {
                     val cbfUseTypeSym = cbfUseWithTypeArgs.typeConstructor.typeSymbol
                     cbfUseTypeSym == cbf
                   }
-
                   if (!isCBF) {
                     log(s"STRICT INSECURE: insecure selection on object: $sel")
                     reporter.error(sel.pos, s"no access to top-level objects allowed!")
@@ -425,6 +426,28 @@ class Plugin(val global: Global) extends NscPlugin {
                 } else {
                   traverse(obj)
                 }
+
+              case nt @ New(id) =>
+                id match {
+                  case tpt @ TypeTree() => // empty TypeTree: check original...
+                    tpt.original match {
+                      case AppliedTypeTree(classToCheck, tpeArgs) =>
+                        val tpeArgsToCheck = tpeArgs.map {
+                          case mt @ TypeTree() => mt.original
+                          case nonMt => nonMt
+                        }
+                        requireOcap(classToCheck.symbol)
+                        tpeArgsToCheck.foreach { tparg =>
+                          if (tparg != null && tparg.symbol != null && !tparg.symbol.isAbstractType)
+                            requireOcap(tparg.symbol)
+                        }
+                      case _ => /* do nothing */
+                    }
+
+                  case other => // non-empty TypeTree: check its symbol directly
+                    requireOcap(other.symbol)
+                }
+
               case other => super.traverse(other)
             }
           }

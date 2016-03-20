@@ -13,6 +13,19 @@ object SomeObject {
   var fld: Array[Int] = _
 }
 
+class Sneaky { // not ocap!
+  def process(a: Array[Int]): Unit = {
+    SomeObject.fld = a
+  }
+}
+
+class NonSneaky {
+  def process(a: Array[Int]): Unit = {
+    for (i <- 0 until a.length)
+      a(i) = a(i) + 1
+  }
+}
+
 class ActorA(next: ActorRef[C]) extends Actor[C] {
   def receive(msg: Box[C])(implicit access: CanAccess { type C = msg.C }): Unit = {
     println("ActorA received object with array")
@@ -22,6 +35,14 @@ class ActorA(next: ActorRef[C]) extends Actor[C] {
 
       // NOT OK: leak array
       //SomeObject.fld = obj.arr
+
+      // NOT OK: create instance of non-ocap class
+      //val s = new Sneaky
+      //s.process(obj.arr)
+
+      // OK: create instance of ocap class
+      val ns = new NonSneaky
+      ns.process(obj.arr)
     })
     next.send(msg)
   }

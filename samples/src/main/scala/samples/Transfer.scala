@@ -51,8 +51,8 @@ class ActorA(next: ActorRef[C]) extends Actor[C] {
 class ActorB extends Actor[C] {
   def receive(msg: Box[C])(implicit access: CanAccess { type C = msg.C }): Unit = {
     println("ActorB received object with array")
-    msg.open(spore { (x: C) =>
-      println(x.arr.mkString("[", ",", "]"))
+    msg.open(spore { x =>
+      println(x.arr.mkString(","))
     })
   }
 }
@@ -75,16 +75,13 @@ object Transfer {
     val a = sys.actor[C](new ActorA(b))
 
     // LaCasa plugin checks that `C` is an ocap class
-    val x = 4
     box[C] { packed =>
       import packed.access
       val box: packed.box.type = packed.box
 
       // initialize object in box with new array
-      box.open(spore {
-        //val localX = x
-        (obj: C) =>
-          obj.arr = Array(1, 2, 3, 4/*localX*/)
+      box.open(spore { obj =>
+        obj.arr = Array(1, 2, 3, 4)
       })
 
       a.send(box)

@@ -48,9 +48,35 @@ sealed class Box[T] private (private val instance: T) {
     }
   }
 
-  def open(fun: Spore[T, Unit])(implicit access: CanAccess { type C = self.C }, noCapture: OnlyNothing[fun.Captured]): Box[T] = {
+  //def open(fun: Spore[T, Unit])(implicit access: CanAccess { type C = self.C }, noCapture: OnlyNothing[fun.Captured]): Box[T] = {
+  def open(fun: T => Unit)(implicit access: CanAccess { type C = self.C }): Box[T] = {
     fun(instance)
     self
+  }
+
+  // swap field
+  // `select` must have form `_.f` (LaCasa plugin checks)
+  // for now: `assign` must have form `(x, y) => x.f = y`
+  def swap[S](select: T => Box[S])(assign: (T, Box[S]) => Unit, newBox: Box[S])(
+    fun: Spore[Packed[S], Unit] { type Excluded = newBox.C })(
+    implicit access: CanAccess { type C = newBox.C }): Unit = {
+    val prev = select(instance)
+    // do the assignment
+    assign(instance, newBox)
+    // pass `prev` using fresh permission to continuation
+    if (prev == null) {
+      fun(new Packed[S] {
+        val box: Box[S] = Box.make[S](null.asInstanceOf[S])
+        val access = new CanAccess { type C = box.C }
+      })
+    } else {
+      prev.open({ (prevValue: S) =>
+        fun(new Packed[S] {
+          val box: Box[S] = Box.make[S](prevValue)
+          val access = new CanAccess { type C = box.C }
+        })
+      })(new CanAccess { type C = prev.C }) // we can do this inside the `lacasa` package :-)
+    }
   }
 }
 

@@ -4,6 +4,13 @@ import scala.reflect.{ClassTag, classTag}
 
 import scala.spores._
 
+import scala.util.control.ControlThrowable
+
+
+private class NoReturnControl extends ControlThrowable {
+  // do not fill in stack trace for efficiency
+  final override def fillInStackTrace(): Throwable = this
+}
 
 /*sealed*/ class CanAccess {
   type C
@@ -25,6 +32,7 @@ object Box {
     val theBox = new Box[T](instance)
     val packed = theBox.pack()
     spore(packed)
+    throw new NoReturnControl
   }
 }
 
@@ -32,9 +40,12 @@ sealed trait OnlyNothing[T]
 
 object OnlyNothing {
   implicit val onlyNothing: OnlyNothing[Nothing] = new OnlyNothing[Nothing] {}
+  implicit val intOnlyNothing: OnlyNothing[Int] = new OnlyNothing[Int] {}
+  implicit def actorRefOnlyNothing[T]: OnlyNothing[ActorRef[T]] = new OnlyNothing[ActorRef[T]] {}
+  implicit def tuple2OnlyNothing[T, S](implicit one: OnlyNothing[T], two: OnlyNothing[S]): OnlyNothing[(T, S)] = new OnlyNothing[(T, S)] {}
 }
 
-sealed class Box[T] private (private val instance: T) {
+sealed class Box[+T] private (private val instance: T) {
   self =>
 
   type C
@@ -48,8 +59,7 @@ sealed class Box[T] private (private val instance: T) {
     }
   }
 
-  //def open(fun: Spore[T, Unit])(implicit access: CanAccess { type C = self.C }, noCapture: OnlyNothing[fun.Captured]): Box[T] = {
-  def open(fun: T => Unit)(implicit access: CanAccess { type C = self.C }): Box[T] = {
+  def open(fun: Spore[T, Unit])(implicit access: CanAccess { type C = self.C }, noCapture: OnlyNothing[fun.Captured]): Box[T] = {
     fun(instance)
     self
   }
@@ -70,17 +80,22 @@ sealed class Box[T] private (private val instance: T) {
         val access = new CanAccess { type C = box.C }
       })
     } else {
-      prev.open({ (prevValue: S) =>
-        fun(new Packed[S] {
-          val box: Box[S] = Box.make[S](prevValue)
-          val access = new CanAccess { type C = box.C }
-        })
-      })(new CanAccess { type C = prev.C }) // we can do this inside the `lacasa` package :-)
+      // we can do this inside the `lacasa` package :-)
+      implicit val localAcc = new CanAccess { type C = prev.C }
+      implicit def fakeOnlyNothing[T] = new OnlyNothing[T] {}
+      prev.open(spore {
+        val localFun = fun
+        (prevValue: S) =>
+          val b = Box.make[S](prevValue)
+          val packed = b.pack()
+          localFun(packed)
+      })
     }
+    throw new NoReturnControl
   }
 }
 
-sealed trait Packed[T] {
+sealed trait Packed[+T] {
   val box: Box[T]
   implicit val access: CanAccess { type C = box.C }
 }

@@ -19,6 +19,14 @@ abstract class Actor[T] {
 
   def receive(msg: Box[T])(implicit cap: CanAccess { type C = msg.C }): Unit
 
+  def self(): ActorRef[T] = {
+    new ActorRef(this)
+  }
+
+  def exit(): Nothing = {
+    throw new NoReturnControl
+  }
+
   // `send` must be strictly internal, since it is passed a `Packed`
   private[lacasa] def send(packed: Packed[T]): Unit = {
     lock.lock()
@@ -33,13 +41,24 @@ abstract class Actor[T] {
     } finally {
       lock.unlock()
     }
+
+    // discard stack because of permission transfer
+    throw new NoReturnControl
   }
 
   private class BufferProcessor(packed: Packed[T]) extends Runnable {
     def run(): Unit = {
       val localPacked = packed
       import localPacked.access
-      receive(localPacked.box)
+
+      try {
+        // process message
+        receive(localPacked.box)
+      } catch {
+        case nrc: NoReturnControl => /* do nothing */
+      }
+
+      // check for next message
       lock.lock()
       try {
         if (buffer.isEmpty) {
@@ -56,7 +75,8 @@ abstract class Actor[T] {
 
 }
 
-final class ActorRef[T](private[lacasa] instance: Actor[T]) {
+// Note: class final and constructor private.
+final class ActorRef[T] private[lacasa] (instance: Actor[T]) {
   def send(msg: Box[T])(implicit access: CanAccess { type C = msg.C }): Unit =
     // *internally* it is OK to create a `Packed` instance
     instance.send(msg.pack())

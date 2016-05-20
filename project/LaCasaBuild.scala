@@ -58,6 +58,18 @@ object LaCasaBuild extends Build {
     base = file("core")
   ) settings (
     commonSettings: _*
+  ) settings (
+    libraryDependencies ++= Seq(Dependencies.junit, Dependencies.junitIntf),
+    testOptions += Tests.Argument(TestFrameworks.JUnit, "-q", "-v", "-s"),
+    publishMavenStyle := true,
+    publishArtifact in Test := false,
+    publishTo <<= version { v: String =>
+      val nexus = "https://oss.sonatype.org/"
+      if (v.trim.endsWith("SNAPSHOT"))
+        Some("snapshots" at nexus + "content/repositories/snapshots")
+      else
+        Some("releases" at nexus + "service/local/staging/deploy/maven2")
+    }
   )
 
   lazy val usePluginSettings = Seq(

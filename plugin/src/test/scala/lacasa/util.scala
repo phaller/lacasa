@@ -44,16 +44,16 @@ object util {
   }
 
   def toolboxClasspath: String = {
-    val f = new java.io.File(s"plugin/target/scala-${scalaBinaryVersion}/classes")
+    val f = new java.io.File(s"core/target/scala-${scalaBinaryVersion}/classes")
     if (!f.exists) sys.error(s"output directory ${f.getAbsolutePath} does not exist.")
     f.getAbsolutePath
   }
 
   def pluginPath: String = {
-    val path = System.getProperty("lacasa.plugin.jar")
+    val path = java.lang.System.getProperty("lacasa.plugin.jar")
     val f = new java.io.File(path)
     val absPath = f.getAbsolutePath
-    //println(s"LaCasa plugin path: $absPath")
+    println(s"LaCasa plugin path: $absPath")
     absPath
   }
 

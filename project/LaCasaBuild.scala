@@ -77,7 +77,7 @@ object LaCasaBuild extends Build {
   ) settings (
     libraryDependencies <+= (scalaVersion)("org.scala-lang" % "scala-reflect" % _),
     publishArtifact in Compile := false
-  )
+  ) dependsOn(core)
 
   lazy val samples = Project(
     id   = "samples",

@@ -274,9 +274,9 @@ class Plugin(val global: Global) extends NscPlugin {
 
     val okModules =
       okJavaModules ++
-      okScalaRuntimeModules ++
+      okScalaRuntimeModules /*++
       okScalaLibraryModules ++
-      okScalaCollectionModules
+      okScalaCollectionModules*/
 
 
     /*val secureStrictModules: Set[Symbol] = Set(ScalaRunTimeModule.moduleClass, RuntimePackage.moduleClass, ScalaPackageClass, PredefModule.moduleClass, mathPackage.moduleClass, numericModule.moduleClass, staticsModule.moduleClass) ++
@@ -699,7 +699,7 @@ class Plugin(val global: Global) extends NscPlugin {
             if (PluginComponent.insecureClasses.nonEmpty) {
               val classNames = PluginComponent.insecureClasses.map(cls => cls.toString)
               log(s"""error: insecure classes: ${classNames.mkString(",")}""")
-              //error(s"""insecure classes: ${classNames.mkString(",")}""")
+              error(s"""insecure classes: ${classNames.mkString(",")}""")
             }
           }
       }

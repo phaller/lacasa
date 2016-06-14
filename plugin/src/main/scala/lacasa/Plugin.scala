@@ -752,8 +752,12 @@ class Plugin(val global: Global) extends NscPlugin {
           if (!hasRun) {
             hasRun = true
             reporter.echo("LaCasa plugin ran successfully")
-            reporter.echo("#classes analyzed: " + PluginComponent.analyzedClasses.size)
-            reporter.echo("#traits analyzed: " + PluginComponent.analyzedTraits.size)
+
+            val numClasses = analyzedClasses.size + analyzedTraits.size
+            reporter.echo(s"#classes/traits analyzed: $numClasses")
+            reporter.echo(s"#ocap: ${numClasses - insecureStrictClasses.size}")
+            reporter.echo(s"#dir. insec.: ${classesAccessingObjects.size}/${insecureStrictClasses.size}")
+
             reporter.echo("#objects analyzed: " + PluginComponent.analyzedObjects.size)
             reporter.echo("#templs analyzed: " + PluginComponent.analyzedTempls.size)
 
@@ -765,21 +769,21 @@ class Plugin(val global: Global) extends NscPlugin {
             reporter.echo(s"patterns checked: ${PluginComponent.patternsChecked}")
             reporter.echo(s"patterns found: ${PluginComponent.patterns}")
 
-            reporter.echo(s"#insecure classes: ${PluginComponent.insecureClasses.size}")
-            reporter.echo("insecure classes:")
-            PluginComponent.insecureClasses.foreach { cls => reporter.echo(cls.fullName) }
+            log(s"#insecure classes: ${PluginComponent.insecureClasses.size}")
+            log("insecure classes:")
+            PluginComponent.insecureClasses.foreach { cls => log(cls.fullName) }
 
             reporter.echo(s"#strict insecure classes: ${PluginComponent.insecureStrictClasses.size}")
             reporter.echo(s"#classes insecure due to object accesses: ${classesAccessingObjects.size}")
             reporter.echo(s"#different accessed objects: ${accessedObjects.size}")
-            reporter.echo(s"accessed objects:")
-            accessedObjects.foreach { obj => reporter.echo(obj) }
+            log(s"accessed objects:")
+            accessedObjects.foreach { obj => log(obj) }
 
-            reporter.echo("################################")
-            reporter.echo("################################")
-            reporter.echo("################################")
-            reporter.echo("strict insecure classes:")
-            PluginComponent.insecureStrictClasses.foreach { cls => reporter.echo(cls.fullName) }
+            log("################################")
+            log("################################")
+            log("################################")
+            log("strict insecure classes:")
+            PluginComponent.insecureStrictClasses.foreach { cls => log(cls.fullName) }
 
             requiredOcapClasses.foreach { cls =>
               if (insecureClasses.contains(cls))

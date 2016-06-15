@@ -9,7 +9,7 @@ object Dependencies {
 object LaCasaBuild extends Build {
 
   lazy val commonSettings = Defaults.defaultSettings ++ Seq(
-    scalaVersion := "2.11.7", // neg tests only work on 2.11 atm
+    scalaVersion := "2.10.6", // neg tests only work on 2.11 atm
     crossVersion := CrossVersion.full,
     version := "0.1.0-SNAPSHOT",
     organization := "org.",

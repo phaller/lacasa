@@ -131,7 +131,7 @@ class Plugin(val global: Global) extends NscPlugin {
     var secureStrictClasses: Set[Symbol] = Set(AnyRefClass, ObjectClass, SerializableClass, JavaSerializableClass)
     var secureStrictClassNames: Set[String] = Set("Product")
 
-    val cbf = rootMirror.getClassByName(TermName("scala.collection.generic.CanBuildFrom"))
+    val cbf = rootMirror.getClassByName(newTermName("scala.collection.generic.CanBuildFrom"))
 
     /*val mathPackage   = rootMirror.getPackage(TermName("scala.math"))
     val numericModule = rootMirror.getModuleByName(TermName("scala.math.Numeric"))
@@ -317,39 +317,11 @@ class Plugin(val global: Global) extends NscPlugin {
 
     val debugName = "AggregationOperation"
 
-    abstract class TypingTraverser(unit: CompilationUnit) extends Traverser {
-      var localTyper: analyzer.Typer =
-        analyzer.newTyper(analyzer.rootContextPostTyper(unit, EmptyTree))
-      protected var curTree: Tree = _
-
-      override final def atOwner(owner: Symbol)(trans: => Unit): Unit = atOwner(curTree, owner)(trans)
-
-      def atOwner(tree: Tree, owner: Symbol)(trans: => Unit): Unit = {
-        val savedLocalTyper = localTyper
-        localTyper = localTyper.atOwner(tree, if (owner.isModule) owner.moduleClass else owner)
-        super.atOwner(owner)(trans)
-        localTyper = savedLocalTyper
-      }
-
-      override def traverse(tree: Tree): Unit = {
-        curTree = tree
-        tree match {
-          case Template(_, _, _) =>
-            // enter template into context chain
-            atOwner(currentOwner) { super.traverse(tree) }
-          case PackageDef(_, _) =>
-            atOwner(tree.symbol) { super.traverse(tree) }
-          case _ =>
-            super.traverse(tree)
-        }
-      }
-    }
-
     var classesAccessingObjects: Set[Symbol] = Set()
     var accessedObjects: Set[String] = Set()
 
     // uses isKnownStrict, insecureStrictClasses, mkInsecureStrict, depsStrict, dependStrictOn
-    class OcapStrictTraverser(unit: CompilationUnit) extends TypingTraverser(unit) {
+    class OcapStrictTraverser(unit: CompilationUnit) extends Traverser {
       var currentMethods: List[Symbol] = List()
       override def traverse(tree: Tree): Unit = tree match {
 

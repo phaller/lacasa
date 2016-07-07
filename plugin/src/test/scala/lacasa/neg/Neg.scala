@@ -35,7 +35,7 @@ class C {
 
 object Use {
   import lacasa.Box
-  Box.box[C] { packed => }
+  Box.mkBox[C] { packed => }
 }"""
     }
   }
@@ -65,7 +65,7 @@ class D extends C {
 
 object Use {
   import lacasa.Box
-  Box.box[E] { packed => }
+  Box.mkBox[E] { packed => }
 }"""
     }
   }
@@ -89,7 +89,7 @@ class C {
 
 object Use {
   import lacasa.Box
-  Box.box[C] { packed => }
+  Box.mkBox[C] { packed => }
 }"""
     }
   }
@@ -111,7 +111,7 @@ object C {
 
 object Use {
   import lacasa.Box
-  Box.box[C] { packed => }
+  Box.mkBox[C] { packed => }
 }"""
     }
   }
@@ -132,7 +132,7 @@ class C {
 }
 object Use {
   import lacasa.Box
-  Box.box[C] { packed => }
+  Box.mkBox[C] { packed => }
 }"""
     }
   }
@@ -156,7 +156,7 @@ class D {
 }
 object Use {
   import lacasa.Box
-  Box.box[D] { packed => }
+  Box.mkBox[D] { packed => }
 }"""
     }
   }
@@ -180,7 +180,7 @@ class C(x: Int) {
 }
 object Use {
   import lacasa.Box
-  Box.box[D] { packed => }
+  Box.mkBox[D] { packed => }
 }"""
     }
   }
@@ -205,7 +205,7 @@ class D {
 }
 object Use {
   import lacasa.Box
-  Box.box[D] { packed => }
+  Box.mkBox[D] { packed => }
 }"""
     }
   }
@@ -230,7 +230,7 @@ class C(x: Int) {
 }
 object Use {
   import lacasa.Box
-  Box.box[D] { packed => }
+  Box.mkBox[D] { packed => }
 }"""
     }
   }
@@ -253,7 +253,7 @@ class C(x: Int) {
 }
 object Use {
   import lacasa.Box
-  Box.box[C] { packed => }
+  Box.mkBox[C] { packed => }
 }"""
     }
   }

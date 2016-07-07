@@ -26,7 +26,7 @@ object Box {
     internal[Int]
   }
 
-  def box[T: ClassTag](spore: Packed[T] => Unit): Unit = {
+  def mkBox[T: ClassTag](spore: Packed[T] => Unit): Unit = {
     val cl = classTag[T].runtimeClass
     val instance: T = cl.newInstance().asInstanceOf[T]
     val theBox = new Box[T](instance)

@@ -36,7 +36,7 @@ class ActorA(next: ActorRef[Msg]) extends Actor[Msg] {
       val nextRef = next
       m => m match {
         case s: Start =>
-          box[Ping] { packed =>
+          mkBox[Ping] { packed =>
             implicit val acc = packed.access
             val box: packed.box.type = packed.box
 
@@ -53,7 +53,7 @@ class ActorA(next: ActorRef[Msg]) extends Actor[Msg] {
           if (pong.count == 100) {
             exit()
           } else {
-            box[Ping] { packed =>
+            mkBox[Ping] { packed =>
               implicit val acc = packed.access
               val box: packed.box.type = packed.box
 
@@ -82,7 +82,7 @@ class ActorB(p: Promise[Boolean]) extends Actor[Msg] {
           if (ping.count == 100) { // done
             p.success(true)
           } else {
-            box[Pong] { packed =>
+            mkBox[Pong] { packed =>
               implicit val acc = packed.access
               val box: packed.box.type = packed.box
 
@@ -116,7 +116,7 @@ class Spec {
     val a = sys.actor[Msg](new ActorA(b))
 
     try {
-      box[Start] { packed =>
+      mkBox[Start] { packed =>
         import packed.access
         val box: packed.box.type = packed.box
         a.send(box)

@@ -11,10 +11,6 @@ import Box._
 import scala.spores._
 
 
-object SomeObject {
-  var fld: Array[Int] = _
-}
-
 class Sneaky { // not ocap!
   def process(a: Array[Int]): Unit = {
     SomeObject.fld = a
@@ -28,70 +24,69 @@ class NonSneaky {
   }
 }
 
-class ActorA(next: ActorRef[C]) extends Actor[C] {
-  def receive(msg: Box[C])(implicit access: CanAccess { type C = msg.C }): Unit = {
-    println("ActorA received object with array")
-    msg.open(spore { (obj: C) =>
-      // OK: update array
-      obj.arr(0) = 100
-
-      // NOT OK: leak array
-      //SomeObject.fld = obj.arr
-
-      // NOT OK: create instance of non-ocap class
-      //val s = new Sneaky
-      //s.process(obj.arr)
-
-      // OK: create instance of ocap class
-      val ns = new NonSneaky
-      ns.process(obj.arr)
-    })
-    next.send(msg)
+class ActorA extends Actor[Any] {
+  override def receive(box: Box[Any])
+      (implicit acc: CanAccess { type C = box.C }) {
+    box open {
+      case s: Start =>
+        mkBox[Message] { packed =>
+          implicit val access = packed.access
+          packed.box open { msg =>
+            msg.arr = Array(1, 2, 3, 4)
+          }
+          s.next.send(packed.box)
+        }
+      case other => // ...
+    }
   }
 }
 
-class ActorB extends Actor[C] {
-  def receive(msg: Box[C])(implicit access: CanAccess { type C = msg.C }): Unit = {
-    println("ActorB received object with array")
-    msg.open(spore { x =>
-      println(x.arr.mkString(","))
-    })
+class ActorB extends Actor[Message] {
+  override def receive(box: Box[Message])
+      (implicit acc: CanAccess { type C = box.C }) {
+    box open { msg =>
+      println(msg.arr.mkString(","))
+    }
   }
 }
 
-object C {
+class Message {
+  var arr: Array[Int] = _
+  def leak(): Unit = {
+    //SomeObject.fld = arr
+  }
+}
+
+object SomeObject {
   var fld: Array[Int] = _
 }
 
-class C {
-  var arr: Array[Int] = _
-  def leak(): Unit = {
-    //C.fld = arr
-  }
+class Start {
+  var next: ActorRef[Message] = _
 }
 
 object Transfer {
+
   def main(args: Array[String]): Unit = try {
     val sys = System()
-    val b = sys.actor[ActorB, C]
-    val a = sys.actor[C](new ActorA(b))
+    val a = sys.actor[ActorA, Any]
 
-    // LaCasa plugin checks that `C` is an ocap class
-    box[C] { packed =>
+    // LaCasa plugin checks that `Start` is an ocap class
+    mkBox[Start] { packed =>
       import packed.access
       val box: packed.box.type = packed.box
 
-      // initialize object in box with new array
+      // initialize object in box
       box.open(spore { obj =>
-        obj.arr = Array(1, 2, 3, 4)
+        val innerSys = System()
+        obj.next = innerSys.actor[ActorB, Message]
       })
 
       a.send(box)
-
-      Thread.sleep(500)
     }
   } catch {
-    case _: ControlThrowable =>
-      /* do nothing */
+    case t: ControlThrowable =>
+      Thread.sleep(1000)
   }
+
 }

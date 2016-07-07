@@ -63,7 +63,7 @@ class Spec {
     val a = sys.actor[C](new ActorA(b))
 
     try {
-      box[C] { packed =>
+      mkBox[C] { packed =>
         import packed.access
         val box: packed.box.type = packed.box
 

@@ -272,7 +272,16 @@ class Plugin(val global: Global) extends NscPlugin {
       "java.util.concurrent.atomic.AtomicReferenceFieldUpdater"
     )
 
+    val okLaCasaModules: Set[String] = Set(
+      "lacasa.Box",
+      "lacasa.System",
+      "lacasa.OnlyNothing",
+      "scala.spores.package",
+      "scala.spores"
+    )
+
     val okModules =
+      okLaCasaModules ++
       okJavaModules ++
       okScalaRuntimeModules ++
       okScalaLibraryModules ++
@@ -289,13 +298,13 @@ class Plugin(val global: Global) extends NscPlugin {
     // invariant: \forall s \in depsStrict(c). !isKnownStrict(s)
     var depsStrict: Map[Symbol, List[Symbol]] = Map()
 
-    // all type arguments to box[C] { ... } *must* be ocap, otherwise error!
+    // all type arguments to mkBox[C] { ... } *must* be ocap, otherwise error!
     var requiredOcapClasses: Set[Symbol] = Set()
     def requireOcap(s: Symbol): Unit = {
       requiredOcapClasses += s
     }
     val boxModule = rootMirror.getModuleByName(newTermName("lacasa.Box"))
-    val boxCreationMethod = boxModule.moduleClass.tpe.member(newTermName("box"))
+    val boxCreationMethod = boxModule.moduleClass.tpe.member(newTermName("mkBox"))
     val boxClass = rootMirror.getClassByName(newTermName("lacasa.Box"))
     val boxOpenMethod = boxClass.tpe.member(newTermName("open"))
 
@@ -399,7 +408,7 @@ class Plugin(val global: Global) extends NscPlugin {
           currentMethods = currentMethods.tail
 
         case TypeApply(fun, args) =>
-          // check for selection of box creation method: Box.box { ... }
+          // check for selection of box creation method: Box.mkBox[C] { ... }
           if (fun.symbol == boxCreationMethod)
             requireOcap(args.head.symbol)
 
@@ -421,7 +430,7 @@ class Plugin(val global: Global) extends NscPlugin {
                   }
                   if (!isCBF) {
                     log(s"STRICT INSECURE: insecure selection on object: $sel")
-                    reporter.error(sel.pos, s"no access to top-level objects allowed!")
+                    reporter.error(sel.pos, s"no access to top-level object ${potentialMod.fullName} allowed")
                   }
                 } else {
                   traverse(obj)

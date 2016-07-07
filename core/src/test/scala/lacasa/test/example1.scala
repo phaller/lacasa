@@ -30,7 +30,7 @@ class ActorA extends Actor[Any] {
     b open { x =>
       x match {
         case s: Start =>
-          box[Message1] { packed =>
+          mkBox[Message1] { packed =>
             implicit val access = packed.access
             packed.box open { msg =>
               msg.arr = Array(1, 2, 3, 4)
@@ -67,7 +67,7 @@ class Spec {
     val b = sys.actor[Message1](new ActorB(p))
 
     try {
-      box[Start] { packed =>
+      mkBox[Start] { packed =>
         import packed.access
         val box: packed.box.type = packed.box
         box open { s =>

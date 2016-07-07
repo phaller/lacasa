@@ -28,7 +28,7 @@ class ActorA(next: ActorRef[C]) extends Actor[Container] {
     println("ActorA received container")
 
     // create box that can be swapped with `part1` of container
-    box[C] { packed =>
+    mkBox[C] { packed =>
       implicit val acc = packed.access
       val b: packed.box.type = packed.box
 
@@ -67,11 +67,11 @@ object Transfer {
     val b = sys.actor[ActorB, C]
     val a = sys.actor[Container](new ActorA(b))
 
-    box[Container] { packed =>
+    mkBox[Container] { packed =>
       import packed.access
       val containerBox: packed.box.type = packed.box
 
-      box[C] { packed2 =>
+      mkBox[C] { packed2 =>
         import packed2.access
         val box2: packed2.box.type = packed2.box
 

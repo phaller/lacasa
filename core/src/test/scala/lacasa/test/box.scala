@@ -32,7 +32,7 @@ final case class Start() extends Msg
 class ActorA(next: ActorRef[C]) extends Actor[Msg] {
   def receive(msg: Box[Msg])(implicit access: CanAccess { type C = msg.C }): Unit = {
     // create box with externally-unique object
-    box[C] { packed =>
+    mkBox[C] { packed =>
       implicit val acc = packed.access
       val box: packed.box.type = packed.box
 
@@ -72,7 +72,7 @@ class Spec {
     val a = sys.actor[Msg](new ActorA(b))
 
     try {
-      box[Start] { packed =>
+      mkBox[Start] { packed =>
         import packed.access
         val box: packed.box.type = packed.box
         a.send(box)

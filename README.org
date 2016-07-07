@@ -1,9 +1,7 @@
-#+TITLE:   README for LaCasa
+#+TITLE:   LaCasa
 #+AUTHOR:  Philipp Haller
 
-* LaCasa
-
-** Building
+* Building
 
 Building LaCasa requires sbt. The build consists of two steps. The
 first step consists of building and packaging the LaCasa compiler
@@ -20,7 +18,7 @@ Build and run samples:
    : > project samples
    : > run
 
-** Testing
+* Testing
 
 Once sbt has been started with the =lacasa.plugin.jar= JVM system
 property set, plugin tests can be run as follows:

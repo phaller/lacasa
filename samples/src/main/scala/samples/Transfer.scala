@@ -3,6 +3,8 @@ package lacasa.samples
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 
+import scala.util.control.ControlThrowable
+
 import lacasa.{System, Box, CanAccess, Actor, ActorRef}
 import Box._
 
@@ -69,7 +71,7 @@ class C {
 }
 
 object Transfer {
-  def main(args: Array[String]): Unit = {
+  def main(args: Array[String]): Unit = try {
     val sys = System()
     val b = sys.actor[ActorB, C]
     val a = sys.actor[C](new ActorA(b))
@@ -88,22 +90,8 @@ object Transfer {
 
       Thread.sleep(500)
     }
+  } catch {
+    case _: ControlThrowable =>
+      /* do nothing */
   }
 }
-
-/*
-object Transfer {
-  def main(args: Array[String]): Unit = {
-    val sys = System()
-    val b = sys.actor[ActorB, Array[Int]]
-    val a = sys.actor[Array[Int]](new ActorA(b))
-
-    val box = Box.make(Array(1, 2, 3, 4)) // will be illegal
-    implicit val access = new CanAccess { type C = box.C } // will be illegal
-
-    a.send(box)
-
-    Thread.sleep(500)
-  }
-}
-*/

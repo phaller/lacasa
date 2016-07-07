@@ -749,7 +749,7 @@ class Plugin(val global: Global) extends NscPlugin {
             PluginComponent.insecureStrictClasses.foreach { cls => reporter.echo(cls.fullName) }
 
             requiredOcapClasses.foreach { cls =>
-              if (insecureStrictClasses.contains(cls))
+              if (insecureClasses.contains(cls))
                 error(s"$cls not ocap!")
             }
 
@@ -773,7 +773,6 @@ class Plugin(val global: Global) extends NscPlugin {
             if (PluginComponent.insecureClasses.nonEmpty) {
               val classNames = PluginComponent.insecureClasses.map(cls => cls.toString)
               log(s"""error: insecure classes: ${classNames.mkString(",")}""")
-              error(s"""insecure classes: ${classNames.mkString(",")}""")
             }
           }
       }

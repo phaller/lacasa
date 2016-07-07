@@ -31,6 +31,11 @@ class C {
   def m(x: Int): Unit = {
     C.danger = 10
   }
+}
+
+object Use {
+  import lacasa.Box
+  Box.box[C] { packed => }
 }"""
     }
   }
@@ -56,6 +61,11 @@ class E extends D {
 
 class D extends C {
   val g = 10
+}
+
+object Use {
+  import lacasa.Box
+  Box.box[E] { packed => }
 }"""
     }
   }
@@ -75,6 +85,11 @@ class C {
     val v1 = C.nodanger
     val v2 = C.danger
   }
+}
+
+object Use {
+  import lacasa.Box
+  Box.box[C] { packed => }
 }"""
     }
   }
@@ -92,6 +107,11 @@ class C {
 object C {
   var danger = 5
   def someMethod(x: Int) = x + danger
+}
+
+object Use {
+  import lacasa.Box
+  Box.box[C] { packed => }
 }"""
     }
   }
@@ -109,6 +129,10 @@ class C {
   def m(x: Int): Unit = {
     val v1 = C.someMethod(5)
   }
+}
+object Use {
+  import lacasa.Box
+  Box.box[C] { packed => }
 }"""
     }
   }
@@ -129,6 +153,10 @@ class D {
   def m2(y: Int): Unit = {
     val c = new C(y)
   }
+}
+object Use {
+  import lacasa.Box
+  Box.box[D] { packed => }
 }"""
     }
   }
@@ -149,6 +177,10 @@ class C(x: Int) {
   def m(y: Int): Unit = {
     val v1 = C.danger + x + y
   }
+}
+object Use {
+  import lacasa.Box
+  Box.box[D] { packed => }
 }"""
     }
   }
@@ -170,6 +202,10 @@ class D {
   def m2(y: Int): Unit = {
     val inst = new E[C]
   }
+}
+object Use {
+  import lacasa.Box
+  Box.box[D] { packed => }
 }"""
     }
   }
@@ -191,6 +227,10 @@ class C(x: Int) {
   def m(y: Int): Unit = {
     val v1 = C.danger + x + y
   }
+}
+object Use {
+  import lacasa.Box
+  Box.box[D] { packed => }
 }"""
     }
   }
@@ -210,6 +250,10 @@ class C(x: Int) {
   def m(y: Int): Unit = {
     val v1 = C.danger + x + y
   }
+}
+object Use {
+  import lacasa.Box
+  Box.box[C] { packed => }
 }"""
     }
   }

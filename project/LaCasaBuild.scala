@@ -20,7 +20,7 @@ object LaCasaBuild extends Build {
     scalacOptions ++= Seq("-deprecation", "-feature"),
     parallelExecution in Test := false,
     logBuffered := false,
-    libraryDependencies += "org.scala-lang.modules" %% "spores-core" % "0.2.2-SNAPSHOT",
+    libraryDependencies += "org.scala-lang.modules" %% "spores-core" % "0.2.3",
     libraryDependencies <+= (scalaVersion)("org.scala-lang" % "scala-reflect" % _),
     scalaHome := {
       val scalaHome = System.getProperty("lacasa.scala.home")

@@ -3,6 +3,8 @@ package lacasa.samples.unique
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 
+import scala.util.control.ControlThrowable
+
 import lacasa.{System, Box, Packed, CanAccess, Actor, ActorRef}
 import Box._
 
@@ -60,7 +62,7 @@ class ActorB extends Actor[C] {
 }
 
 object Transfer {
-  def main(args: Array[String]): Unit = {
+  def main(args: Array[String]): Unit = try {
     val sys = System()
     val b = sys.actor[ActorB, C]
     val a = sys.actor[Container](new ActorA(b))
@@ -94,5 +96,8 @@ object Transfer {
         )
       }
     }
+  } catch {
+    case _: ControlThrowable =>
+      /* do nothing */
   }
 }

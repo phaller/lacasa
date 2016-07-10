@@ -12,7 +12,7 @@ import scala.concurrent.duration._
 
 import scala.spores._
 
-import lacasa.{System, Box, CanAccess, Actor, ActorRef}
+import lacasa.{System, Box, CanAccess, Actor, ActorRef, doNothing}
 import Box._
 
 
@@ -46,7 +46,7 @@ class ActorA(next: ActorRef[Msg]) extends Actor[Msg] {
               ping => ping.sender = localSelf
             })
 
-            nextRef.send(box)
+            nextRef.send(box) { doNothing.make(packed.box) }
           }
 
         case pong: Pong =>
@@ -66,7 +66,7 @@ class ActorA(next: ActorRef[Msg]) extends Actor[Msg] {
                   ping.count  = localCount + 1
               })
 
-              nextRef.send(box)
+              nextRef.send(box) { doNothing.make(packed.box) }
             }
           }
       }
@@ -93,7 +93,7 @@ class ActorB(p: Promise[Boolean]) extends Actor[Msg] {
                   pong.count  = localCount
               })
 
-              ping.sender.send(box)
+              ping.sender.send(box) { doNothing.make(packed.box) }
             }
 
           }
@@ -119,7 +119,7 @@ class Spec {
       mkBox[Start] { packed =>
         import packed.access
         val box: packed.box.type = packed.box
-        a.send(box)
+        a.send(box) { doNothing.make(packed.box) }
       }
     } catch {
       case t: Throwable =>

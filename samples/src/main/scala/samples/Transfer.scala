@@ -5,7 +5,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 import scala.util.control.ControlThrowable
 
-import lacasa.{System, Box, CanAccess, Actor, ActorRef}
+import lacasa.{System, Box, CanAccess, Actor, ActorRef, doNothing}
 import Box._
 
 import scala.spores._
@@ -34,7 +34,7 @@ class ActorA extends Actor[Any] {
           packed.box open { msg =>
             msg.arr = Array(1, 2, 3, 4)
           }
-          s.next.send(packed.box)
+          s.next.send(packed.box) { doNothing.make(packed.box) }
         }
       case other => // ...
     }
@@ -82,7 +82,7 @@ object Transfer {
         obj.next = innerSys.actor[ActorB, Message]
       })
 
-      a.send(box)
+      a.send(box) { doNothing.make(box) }
     }
   } catch {
     case t: ControlThrowable =>

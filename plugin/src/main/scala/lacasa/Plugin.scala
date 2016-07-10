@@ -276,6 +276,8 @@ class Plugin(val global: Global) extends NscPlugin {
       "lacasa.Box",
       "lacasa.System",
       "lacasa.OnlyNothing",
+      "lacasa.doNothing",
+      "lacasa.sleep",
       "scala.spores.package",
       "scala.spores"
     )

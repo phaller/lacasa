@@ -12,7 +12,7 @@ import scala.concurrent.duration._
 
 import scala.spores._
 
-import lacasa.{System, Box, CanAccess, Actor, ActorRef}
+import lacasa.{System, Box, CanAccess, Actor, ActorRef, doNothing}
 import Box._
 
 
@@ -27,7 +27,7 @@ class Start {
 class ActorA extends Actor[Any] {
   override def receive(b: Box[Any])
       (implicit acc: CanAccess { type C = b.C }) {
-    b open { x =>
+    b.open(spore { x =>
       x match {
         case s: Start =>
           mkBox[Message1] { packed =>
@@ -35,12 +35,12 @@ class ActorA extends Actor[Any] {
             packed.box open { msg =>
               msg.arr = Array(1, 2, 3, 4)
             }
-            s.next.send(packed.box)
+            s.next.send(packed.box) { doNothing.make(packed.box) }
           }
 
         case other => // ..
       }
-    }
+    })
   }
 }
 
@@ -73,7 +73,7 @@ class Spec {
         box open { s =>
           s.next = capture(b) // !!! captures `b` within `open`
         }
-        a.send(box)
+        a.send(box) { doNothing.make(packed.box) }
       }
     } catch {
       case t: Throwable =>

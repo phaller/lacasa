@@ -6,6 +6,28 @@ import scala.reflect.{ClassTag, classTag}
 import scala.concurrent.ExecutionContext
 import scala.collection.mutable.Buffer
 
+import scala.spores.NullarySpore
+
+
+object doNothing {
+  def make[T](box: Box[T]): NullarySpore[Unit] { type Excluded = box.C } =
+    new NullarySpore[Unit] {
+      type Captured = Nothing
+      type Excluded = box.C
+      def apply(): Unit = {}
+    }
+}
+
+object sleep {
+  def make[T](box: Box[T])(millis: Long): NullarySpore[Unit] { type Excluded = box.C } =
+    new NullarySpore[Unit] {
+      type Captured = Nothing
+      type Excluded = box.C
+      def apply(): Unit = {
+        Thread.sleep(millis)
+      }
+    }
+}
 
 abstract class Actor[T] {
   self =>
@@ -28,7 +50,7 @@ abstract class Actor[T] {
   }
 
   // `send` must be strictly internal, since it is passed a `Packed`
-  private[lacasa] def send(packed: Packed[T]): Unit = {
+  private[lacasa] def send(packed: Packed[T])(cont: () => Unit): Unit = {
     lock.lock()
     try {
       if (idle) {
@@ -41,6 +63,9 @@ abstract class Actor[T] {
     } finally {
       lock.unlock()
     }
+
+    // invoke continuation
+    cont()
 
     // discard stack because of permission transfer
     throw new NoReturnControl
@@ -77,9 +102,10 @@ abstract class Actor[T] {
 
 // Note: class final and constructor private.
 final class ActorRef[T] private[lacasa] (instance: Actor[T]) {
-  def send(msg: Box[T])(implicit access: CanAccess { type C = msg.C }): Unit =
+  def send(msg: Box[T])(cont: NullarySpore[Unit] { type Excluded = msg.C })
+          (implicit access: CanAccess { type C = msg.C }): Unit =
     // *internally* it is OK to create a `Packed` instance
-    instance.send(msg.pack())
+    instance.send(msg.pack())(cont)
 }
 
 

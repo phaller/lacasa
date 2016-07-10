@@ -11,6 +11,7 @@ import scala.concurrent.{Future, Promise, Await}
 import scala.concurrent.duration._
 
 import scala.spores._
+import scala.spores.SporeConv._
 
 import lacasa.{System, Box, CanAccess, Actor, ActorRef}
 import Box._
@@ -33,7 +34,7 @@ class ActorA(next: ActorRef[C]) extends Actor[C] {
       val ns = new NonSneaky
       ns.process(obj.arr)
     })
-    next.send(msg)
+    next.send(msg)(spore { () => })
   }
 }
 
@@ -72,7 +73,7 @@ class Spec {
           obj.arr = Array(1, 2, 3, 4)
         })
 
-        a.send(box)
+        a.send(box)(spore { () => })
       }
     } catch {
       case t: Throwable =>

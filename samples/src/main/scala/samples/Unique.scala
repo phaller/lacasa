@@ -5,7 +5,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 import scala.util.control.ControlThrowable
 
-import lacasa.{System, Box, Packed, CanAccess, Actor, ActorRef}
+import lacasa.{System, Box, Packed, CanAccess, Actor, ActorRef, doNothing, sleep}
 import Box._
 
 import scala.spores._
@@ -46,7 +46,7 @@ class ActorA(next: ActorRef[C]) extends Actor[Container] {
             part1Obj.arr(0) = 1000
           }
 
-          next.send(part1)
+          next.send(part1) { doNothing.make(part1) }
         })
     }
   }
@@ -90,8 +90,7 @@ object Transfer {
                 import packed.access
                 val ignore = packed.box
 
-                localA.send(localContainerBox)
-                Thread.sleep(500)
+                localA.send(localContainerBox) { sleep.make(localContainerBox)(500) }
           }
         )
       }

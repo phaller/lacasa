@@ -29,7 +29,7 @@ object sleep {
     }
 }
 
-trait Actor[T] {
+abstract class Actor[T] {
 
   private val buffer = Buffer.empty[Packed[T]]
   private var idle = true
@@ -38,11 +38,9 @@ trait Actor[T] {
   @volatile
   private[lacasa] var context: ExecutionContext = null
 
-  def receive(msg: Box[T])(implicit cap: CanAccess { type C = msg.C }): Unit
+  def receive(msg: Box[T])(implicit acc: CanAccess { type C = msg.C }): Unit
 
-  def self(): ActorRef[T] = {
-    new ActorRef(this)
-  }
+  final val self: ActorRef[T] = new InternalActorRef(this)
 
   def exit(): Nothing = {
     throw new NoReturnControl
@@ -99,10 +97,15 @@ trait Actor[T] {
 
 }
 
-// Note: class final and constructor private.
-final class ActorRef[T] private[lacasa] (instance: Actor[T]) {
+abstract class ActorRef[T] {
   def send(msg: Box[T])(cont: NullarySpore[Unit] { type Excluded = msg.C })
-          (implicit access: CanAccess { type C = msg.C }): Unit =
+          (implicit acc: CanAccess { type C = msg.C }): Unit
+}
+
+// Note: class final and constructor private.
+final class InternalActorRef[T] private[lacasa] (instance: Actor[T]) extends ActorRef[T] {
+  override def send(msg: Box[T])(cont: NullarySpore[Unit] { type Excluded = msg.C })
+          (implicit acc: CanAccess { type C = msg.C }): Unit =
     // *internally* it is OK to create a `Packed` instance
     instance.send(msg.pack())(cont)
 }
@@ -180,13 +183,13 @@ class System private[lacasa] (implicit context: ExecutionContext) {
     val cl = classTag[T].runtimeClass
     val instance = cl.newInstance().asInstanceOf[Actor[S]]
     instance.context = context
-    new ActorRef(instance)
+    new InternalActorRef(instance)
   }
 
   def actor[S](creator: => Actor[S]): ActorRef[S] = {
     val instance = creator
     instance.context = context
-    new ActorRef(instance)
+    new InternalActorRef(instance)
   }
 
 }

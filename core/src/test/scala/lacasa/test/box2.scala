@@ -32,7 +32,7 @@ final class Pong extends Msg {
 class ActorA(next: ActorRef[Msg]) extends Actor[Msg] {
   def receive(msg: Box[Msg])(implicit access: CanAccess { type C = msg.C }): Unit = {
     msg.open(spore {
-      val selfRef = this.self()
+      val selfRef = this.self
       val nextRef = next
       m => m match {
         case s: Start =>

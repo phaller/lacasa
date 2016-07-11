@@ -47,7 +47,7 @@ abstract class Actor[T] {
   }
 
   // `send` must be strictly internal, since it is passed a `Packed`
-  private[lacasa] def send(packed: Packed[T])(cont: () => Unit): Unit = {
+  private[lacasa] def send(packed: Packed[T])(cont: () => Unit): Nothing = {
     lock.lock()
     try {
       if (idle) {
@@ -99,13 +99,13 @@ abstract class Actor[T] {
 
 abstract class ActorRef[T] {
   def send(msg: Box[T])(cont: NullarySpore[Unit] { type Excluded = msg.C })
-          (implicit acc: CanAccess { type C = msg.C }): Unit
+          (implicit acc: CanAccess { type C = msg.C }): Nothing
 }
 
 // Note: class final and constructor private.
 final class InternalActorRef[T] private[lacasa] (instance: Actor[T]) extends ActorRef[T] {
   override def send(msg: Box[T])(cont: NullarySpore[Unit] { type Excluded = msg.C })
-          (implicit acc: CanAccess { type C = msg.C }): Unit =
+          (implicit acc: CanAccess { type C = msg.C }): Nothing =
     // *internally* it is OK to create a `Packed` instance
     instance.send(msg.pack())(cont)
 }

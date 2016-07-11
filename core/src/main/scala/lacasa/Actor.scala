@@ -29,8 +29,7 @@ object sleep {
     }
 }
 
-abstract class Actor[T] {
-  self =>
+trait Actor[T] {
 
   private val buffer = Buffer.empty[Packed[T]]
   private var idle = true

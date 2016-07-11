@@ -34,7 +34,9 @@ class ActorA extends Actor[Any] {
           packed.box open { msg =>
             msg.arr = Array(1, 2, 3, 4)
           }
-          s.next.send(packed.box) { doNothing.make(packed.box) }
+          s.next.send(packed.box) {
+            doNothing.make(packed.box)
+          }
         }
       case other => // ...
     }

@@ -239,7 +239,7 @@ object Use {
   def test11() {
     expectError("class C") {
       """
-case class SignalMessageWithSourceId[@specialized(Int, Long) Id, Signal](
+case class SignalMessageWithSourceId[Id, Signal](
   val targetId: Id,
   val sourceId: Id,
   val signal: Signal)

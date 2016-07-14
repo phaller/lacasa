@@ -10,12 +10,113 @@ class Plugin(val global: Global) extends NscPlugin {
 
   val name = "lacasa"
   val description = "LaCasa plugin"
-  val components = List[NscPluginComponent](PluginComponent, ReporterComponent)
+  val components = List[NscPluginComponent](StackConfinement, PluginComponent, ReporterComponent)
 
   val logEnabled = java.lang.System.getProperty("lacasa.plugin.logging", "false") == "true"
   def log(msg: => String): Unit = {
     if (logEnabled)
       println(msg)
+  }
+
+  val boxModule = rootMirror.getModuleByName(newTermName("lacasa.Box"))
+  val boxCreationMethod = boxModule.moduleClass.tpe.member(newTermName("mkBox"))
+  val boxClass = rootMirror.getClassByName(newTermName("lacasa.Box"))
+  val boxOpenMethod = boxClass.tpe.member(newTermName("open"))
+  val boxSwapMethod = boxClass.tpe.member(newTermName("swap"))
+
+  /** Stack confinement checker
+    */
+  object StackConfinement extends NscPluginComponent {
+    val global = Plugin.this.global
+    import global.{log => _, _}
+    import definitions._
+    import reflect.internal.Flags._
+
+    override val runsAfter = List("refchecks")
+    val phaseName = "lacasa-stackconfinement"
+
+    class SCTraverser(unit: CompilationUnit) extends Traverser {
+      var currentMethods: List[Symbol] = List()
+      val stackConfined: List[Type] = List(typeOf[lacasa.Box[Any]], typeOf[lacasa.CanAccess])
+
+      override def traverse(tree: Tree): Unit = tree match {
+        case ClassDef(mods, name, tparams, impl) =>
+          log(s"checking class $name")
+          traverse(impl)
+
+        case Template(parents, self, body) =>
+          body.foreach(t => traverse(t))
+
+        case ValDef(mods, name, tpt, rhs) =>
+          traverse(rhs)
+
+        case methodDef @ DefDef(mods, name, tparams, vparamss, tpt, rhs) =>
+          log(s"checking method definition ${methodDef.symbol.name}")
+          log(s"raw:\n${showRaw(methodDef)}")
+          // find out if this is a ctor of a spore or closure
+          // TODO: is there a better way than string comparison with "anon"?
+          if (methodDef.symbol.owner.fullName.toString.contains("anon") &&
+              methodDef.symbol.name == termNames.CONSTRUCTOR) {
+            // ctor of spore or closure: skip
+          } else {
+            currentMethods = methodDef.symbol :: currentMethods
+            traverse(rhs)
+            currentMethods = currentMethods.tail
+          }
+
+        case Apply(Select(New(id), _), args) =>
+          log(s"checking constructor invocation $id")
+          args.foreach { arg =>
+            if (arg.symbol != null && stackConfined.exists(t => arg.symbol.tpe.finalResultType <:< t)) {
+              reporter.error(arg.pos, s"$arg passed as ctor argument, but ${arg.symbol.tpe.finalResultType} confined to stack")
+            }
+          }
+
+        case Apply(nested @ Apply(Apply(fun, args1), args2), List(b @ Block(stats, expr))) if fun.symbol == boxSwapMethod =>
+          log(s"checking apply of ${fun.symbol.name}")
+          // traverse only continuation closure
+          // constraints for args1 and args2 checked elsewhere
+          traverse(b)
+
+        // apply may be a setter
+        case Apply(fun, args) =>
+          log(s"checking apply of ${fun.symbol.name}")
+          if (fun.symbol.isSetter && args.head.symbol != null) {
+            val argTpe = args.head.symbol.tpe // check type of (first) arg
+            log(s"argTpe: $argTpe")
+            log(s"argTpe.finalResultType: ${argTpe.finalResultType}")
+            if (stackConfined.exists(t => argTpe.finalResultType <:< t)) {
+              reporter.error(args.head.pos, s"${args.head} assigned to field, but ${argTpe.finalResultType} confined to stack")
+            }
+          }
+          traverse(fun)
+          args.foreach(traverse)
+
+        case Function(vparams, body) =>
+          traverse(body)
+
+        case Select(obj, _) =>
+          traverse(obj)
+
+        case Literal(any) => /* all good */
+
+        case unhandled =>
+          log(s"unhandled tree $tree")
+          log(s"raw:\n${showRaw(tree)}")
+          super.traverse(tree)
+      }
+    }
+
+    class SCPhase(prev: Phase) extends StdPhase(prev) {
+      override def apply(unit: CompilationUnit): Unit = {
+        log("LaCasa stack confinement checking...")
+        val sct = new SCTraverser(unit)
+        sct.traverse(unit.body)
+      }
+    }
+
+    override def newPhase(prev: Phase): StdPhase =
+      new SCPhase(prev)
   }
 
   object PluginComponent extends NscPluginComponent {
@@ -24,7 +125,7 @@ class Plugin(val global: Global) extends NscPlugin {
     import definitions._
     import reflect.internal.Flags._
 
-    override val runsAfter = List("refchecks")
+    override val runsAfter = List("lacasa-stackconfinement")
     val phaseName = "lacasa"
 
     var analyzedClasses: Set[Symbol] = Set()
@@ -305,10 +406,6 @@ class Plugin(val global: Global) extends NscPlugin {
     def requireOcap(s: Symbol): Unit = {
       requiredOcapClasses += s
     }
-    val boxModule = rootMirror.getModuleByName(newTermName("lacasa.Box"))
-    val boxCreationMethod = boxModule.moduleClass.tpe.member(newTermName("mkBox"))
-    val boxClass = rootMirror.getClassByName(newTermName("lacasa.Box"))
-    val boxOpenMethod = boxClass.tpe.member(newTermName("open"))
 
     def isKnownStrict(cls: Symbol): Boolean =
       insecureStrictClasses.contains(cls) || secureStrictClasses.contains(cls) || secureStrictClassNames.contains(cls.name.toString)
@@ -659,6 +756,21 @@ class Plugin(val global: Global) extends NscPlugin {
         case New(id) =>
           // problem pattern 4: create instance of insecure class
           log(s"checking constructor invocation $id")
+
+          if (currentMethods.nonEmpty) {
+            val cls = currentMethods.head.owner
+            val other = id.symbol
+            // check if instantiated class (other) is insecure
+            if (insecureClasses.contains(other)) {
+              insecureMethods = insecureMethods + currentMethods.head
+              mkInsecure(cls)
+            } else if (!isKnown(other)) {
+              val currentDeps = deps.getOrElse(cls, List[Symbol]())
+              if (!currentDeps.contains(other)) {
+                deps = deps + (cls -> (other :: currentDeps))
+              }
+            }
+          }
 
           checkPattern(4)
           if (currentMethods.nonEmpty /*TODO*/ && !currentMethods.head.owner.isModuleClass) {

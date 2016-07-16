@@ -136,6 +136,44 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
         log(s"analyzing try:")
         log(s"raw:\n${showRaw(tree)}")
 
+        catches.foreach { case casedef @ CaseDef(pat, guard, body) =>
+          body match {
+            case Block(stats, expr) =>
+              stats(1) match {
+                case LabelDef(n, l, If(cond, thenp, elsep)) =>
+                  log(s"KKKKKKKKKKKKKKKK")
+                  log(s"KKKKKKKKKKKKKKKK")
+                  log(s"KKKKKKKKKKKKKKKK")
+                  log(s"KKKKKKKKKKKKKKKK")
+                  log(s"KKKKKKKKKKKKKKKK")
+                  cond match {
+                    case TypeApply(left, List(right)) =>
+                      log(s"$right")
+                      if (right.tpe <:< ctrlThrowableTpe) {
+                        log(s"KKKKKKKKKKKKKKKK")
+                        log(s"KKKKKKKKKKKKKKKK")
+                        log(s"KKKKKKKKKKKKKKKK")
+                        log(s"KKKKKKKKKKKKKKKK")
+                        log(s"KKKKKKKKKKKKKKKK")
+                        thenp match {
+                          case Apply(_, List(thenbody)) =>
+                            log(s"THE THEN PART (1):")
+                            log(s"${showRaw(thenbody)}")
+                            checkPropagation(casedef, thenbody, right.tpe)
+
+                          case Block(_, Apply(_, List(thenbody))) =>
+                            log(s"THE THEN PART (2):")
+                            log(s"${showRaw(thenbody)}")
+                            checkPropagation(casedef, thenbody, right.tpe)
+                        }
+                      }
+                  }
+                case otherwise => log(s"no labeldef here")
+              }
+            case other => log(s"not a block here")
+          }
+        }
+
       case unhandled =>
         log(s"unhandled tree $tree")
         log(s"raw:\n${showRaw(tree)}")

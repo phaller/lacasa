@@ -88,6 +88,7 @@ object Transfer {
     }
   } catch {
     case t: ControlThrowable =>
+      uncheckedCatchControl
       Thread.sleep(1000)
   }
 

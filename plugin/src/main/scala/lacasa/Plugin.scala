@@ -8,18 +8,24 @@ import scala.collection.{mutable, immutable}
 import Util._
 
 
-class Plugin(val global: Global) extends NscPlugin {
+trait Symbols {
+  val global: Global
+  import global._
+
+  val boxModule: global.Symbol = rootMirror.getModuleByName(newTermName("lacasa.Box"))
+  val boxCreationMethod: global.Symbol = boxModule.moduleClass.tpe.member(newTermName("mkBox"))
+  val boxClass: global.Symbol = rootMirror.getClassByName(newTermName("lacasa.Box"))
+  val boxOpenMethod: global.Symbol = boxClass.tpe.member(newTermName("open"))
+  val boxSwapMethod: global.Symbol = boxClass.tpe.member(newTermName("swap"))
+}
+
+class Plugin(val global: Global) extends NscPlugin with Symbols {
   import global.{log => _, _}
 
   val name = "lacasa"
   val description = "LaCasa plugin"
-  val components = List[NscPluginComponent](new StackConfinement(global), PluginComponent, ReporterComponent)
 
-  val boxModule = rootMirror.getModuleByName(newTermName("lacasa.Box"))
-  val boxCreationMethod = boxModule.moduleClass.tpe.member(newTermName("mkBox"))
-  val boxClass = rootMirror.getClassByName(newTermName("lacasa.Box"))
-  val boxOpenMethod = boxClass.tpe.member(newTermName("open"))
-  val boxSwapMethod = boxClass.tpe.member(newTermName("swap"))
+  val components = List[NscPluginComponent](new ControlThrowableComponent(this), PluginComponent, ReporterComponent)
 
   object PluginComponent extends NscPluginComponent {
     val global = Plugin.this.global
@@ -27,7 +33,7 @@ class Plugin(val global: Global) extends NscPlugin {
     import definitions._
     import reflect.internal.Flags._
 
-    override val runsAfter = List("lacasa-stackconfinement")
+    override val runsAfter = List("lacasa-controlthrowable")
     val phaseName = "lacasa"
 
     var analyzedClasses: Set[Symbol] = Set()
@@ -371,6 +377,8 @@ class Plugin(val global: Global) extends NscPlugin {
     // uses isKnownStrict, insecureStrictClasses, mkInsecureStrict, depsStrict, dependStrictOn
     class OcapStrictTraverser(unit: CompilationUnit) extends Traverser {
       var currentMethods: List[Symbol] = List()
+      val stackConfined: List[Type] = List(typeOf[lacasa.Box[Any]], typeOf[lacasa.CanAccess])
+
       override def traverse(tree: Tree): Unit = tree match {
 
         case templ @ Template(parents, self, body) =>
@@ -382,36 +390,60 @@ class Plugin(val global: Global) extends NscPlugin {
               if (cls.name.toString.startsWith(debugName))
                 println(s"LACASA: make insecure ${cls.name} because of insecure parent")
               mkInsecureStrict(cls)
-            } else {
-              if (parents.exists(parent => !isKnownStrict(parent.symbol))) {
-                log(s"STRICT: there is unknown parent of ${cls.fullName}!")
-                // for each unknown parent: create dependency
-                parents.foreach { parent =>
-                  val parentSym = parent.symbol
-                  if (!isKnownStrict(parentSym)) {
-                    if (cls.name.toString.startsWith(debugName))
-                      println(s"LACASA: add dep for ${cls.name} on ${parentSym.name} because of inheritance")
-                    val currentDeps = depsStrict.getOrElse(cls, List[Symbol]())
-                    if (!currentDeps.contains(parentSym))
-                      depsStrict = depsStrict + (cls -> (parentSym :: currentDeps))
-                  }
+            } else if (parents.exists(parent => !isKnownStrict(parent.symbol))) {
+              log(s"STRICT: there is unknown parent of ${cls.fullName}!")
+              // for each unknown parent: create dependency
+              parents.foreach { parent =>
+                val parentSym = parent.symbol
+                if (!isKnownStrict(parentSym)) {
+                  if (cls.name.toString.startsWith(debugName))
+                    println(s"LACASA: add dep for ${cls.name} on ${parentSym.name} because of inheritance")
+                  val currentDeps = depsStrict.getOrElse(cls, List[Symbol]())
+                  if (!currentDeps.contains(parentSym))
+                    depsStrict = depsStrict + (cls -> (parentSym :: currentDeps))
                 }
               }
             }
           }
-          body.foreach(t => traverse(t))
+          body.foreach(traverse)
 
         case methodDef @ DefDef(mods, name, tparams, vparamss, tpt, rhs) =>
-          log(s"STRICT ${methodDef.symbol.name} checking method definition ${methodDef.symbol.name}")
-          log(s"STRICT raw:\n${showRaw(methodDef)}")
-          currentMethods = methodDef.symbol :: currentMethods
-          traverse(rhs)
-          currentMethods = currentMethods.tail
+          log(s"STRICT checking method definition ${methodDef.symbol.name}")
+          //log(s"STRICT raw:\n${showRaw(methodDef)}")
+          // find out if this is a ctor of a spore or closure:
+          // needs to be skipped for stack confinement checking
+          // TODO: is there a better way than string comparison with "anon"?
+          if (methodDef.symbol.owner.fullName.toString.contains("anon") &&
+            methodDef.symbol.name == termNames.CONSTRUCTOR) {
+            // ctor of spore or closure: skip
+          } else {
+            currentMethods = methodDef.symbol :: currentMethods
+            traverse(rhs)
+            currentMethods = currentMethods.tail
+          }
+
+        // stack confinement checking
+        case Apply(Select(New(id), _), args) =>
+          args.foreach(traverse)
+          log(s"SC: checking constructor invocation $id")
+          args.foreach { arg =>
+            if (arg.symbol != null && stackConfined.exists(t => arg.symbol.tpe.finalResultType <:< t)) {
+              reporter.error(arg.pos, s"$arg passed as ctor argument, but ${arg.symbol.tpe.finalResultType} confined to stack")
+            }
+          }
+
+        // stack confinement checking
+        case Apply(nested @ Apply(Apply(fun, args1), args2), List(b @ Block(stats, expr))) if fun.symbol == boxSwapMethod =>
+          log(s"SC: checking apply of swap ${fun.symbol.name}")
+          // traverse only continuation closure
+          // constraints for args1 and args2 checked elsewhere
+          traverse(b)
 
         case TypeApply(fun, args) =>
-          // check for selection of box creation method: Box.mkBox[C] { ... }
           if (fun.symbol == boxCreationMethod)
             requireOcap(args.head.symbol)
+          traverse(fun)
+          args.foreach(traverse)
 
         case Apply(fun, args) if fun.symbol == boxOpenMethod =>
           val leakChecker = new Traverser {
@@ -461,14 +493,35 @@ class Plugin(val global: Global) extends NscPlugin {
               case other => super.traverse(other)
             }
           }
+
           args.foreach {
             case block @ Block(_, _) => leakChecker.traverse(block)
             case _ => // do not traverse
           }
           traverse(fun)
 
+        case Apply(fun, args) if fun.symbol.isSetter =>
+          // check stack confinement
+          if (args.head.symbol != null) {
+            val argTpe = args.head.symbol.tpe // check type of (first) arg
+            log(s"argTpe: $argTpe")
+            log(s"argTpe.finalResultType: ${argTpe.finalResultType}")
+            if (stackConfined.exists(t => argTpe.finalResultType <:< t)) {
+              reporter.error(args.head.pos, s"${args.head} assigned to field, but ${argTpe.finalResultType} confined to stack")
+            }
+          }
+          traverse(fun)
+          args.foreach(arg => traverse(arg))
+
+        case app @ Apply(fun, args) =>
+          log(s"SC: Apply:\n${showRaw(app)}")
+          traverse(fun)
+          args.foreach(traverse)
+
         // STRICT: selecting member of object is insecure
         case sel @ Select(obj, mem) =>
+          traverse(obj)
+
           if (currentMethods.nonEmpty && !currentMethods.head.owner.isModuleClass) {
             val potentialMod = sel.symbol.owner
             if (potentialMod.isModuleClass && potentialMod.isSynthetic) {
@@ -542,6 +595,10 @@ class Plugin(val global: Global) extends NscPlugin {
           }
 
         case _ =>
+          val raw = showRaw(tree)
+          if (raw.contains("swap"))
+            log(s"occurrence of swap in unhandled tree:\n$raw")
+
           super.traverse(tree)
       }
     }
@@ -713,10 +770,19 @@ class Plugin(val global: Global) extends NscPlugin {
 
     class OcapPhase(prev: Phase) extends StdPhase(prev) {
       override def apply(unit: CompilationUnit): Unit = {
+        log("################################")
+        log("################################")
         log("applying LaCasa OcapPhase...")
+        log("################################")
+        log("################################")
         val oct = new OcapTraverser(unit)
         oct.traverse(unit.body)
 
+        log("################################")
+        log("################################")
+        log("running OcapStrictTraverser...")
+        log("################################")
+        log("################################")
         val ocst = new OcapStrictTraverser(unit)
         ocst.traverse(unit.body)
       }
@@ -783,7 +849,9 @@ class Plugin(val global: Global) extends NscPlugin {
             log("summary of results")
             log("==================")
             log("insecure classes:")
-            PluginComponent.insecureClasses.foreach { cls => log(cls.toString) }
+            insecureClasses.foreach { cls => log(cls.toString) }
+            log("classes required to be ocap:")
+            requiredOcapClasses.foreach { cls => log(cls.toString) }
 
             if (PluginComponent.deps.keySet.nonEmpty) {
               log("\nunresolved dependencies:")

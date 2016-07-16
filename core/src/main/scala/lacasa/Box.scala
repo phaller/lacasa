@@ -34,6 +34,9 @@ object Box {
     spore(packed)
     throw new NoReturnControl
   }
+
+  // marker method as escape hatch for ControlThrowable checker
+  def uncheckedCatchControl: Unit = {}
 }
 
 sealed trait OnlyNothing[T]

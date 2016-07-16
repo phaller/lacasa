@@ -97,6 +97,7 @@ object Transfer {
     }
   } catch {
     case _: ControlThrowable =>
+      uncheckedCatchControl
       /* do nothing */
   }
 }

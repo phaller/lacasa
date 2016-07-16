@@ -10,21 +10,17 @@ import Util._
 
 /** Stack confinement checker
   */
-class StackConfinement(val global: Global) extends NscPluginComponent {
+class StackConfinement(val plugin: Plugin) extends NscPluginComponent {
+  val global: plugin.global.type = plugin.global
   import global.{log => _, _}
   import definitions._
   import reflect.internal.Flags._
 
+  //override val runsAfter = List("lacasa-controlthrowable")
   override val runsAfter = List("refchecks")
   val phaseName = "lacasa-stackconfinement"
 
-  val boxModule = rootMirror.getModuleByName(newTermName("lacasa.Box"))
-  val boxCreationMethod = boxModule.moduleClass.tpe.member(newTermName("mkBox"))
-  val boxClass = rootMirror.getClassByName(newTermName("lacasa.Box"))
-  val boxOpenMethod = boxClass.tpe.member(newTermName("open"))
-  val boxSwapMethod = boxClass.tpe.member(newTermName("swap"))
-
-  class SCTraverser(unit: CompilationUnit) extends Traverser {
+  private class SCTraverser(unit: CompilationUnit) extends Traverser {
     var currentMethods: List[Symbol] = List()
     val stackConfined: List[Type] = List(typeOf[lacasa.Box[Any]], typeOf[lacasa.CanAccess])
 
@@ -61,7 +57,7 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
           }
         }
 
-      case Apply(nested @ Apply(Apply(fun, args1), args2), List(b @ Block(stats, expr))) if fun.symbol == boxSwapMethod =>
+      case Apply(nested @ Apply(Apply(fun, args1), args2), List(b @ Block(stats, expr))) if fun.symbol == plugin.boxSwapMethod =>
         log(s"checking apply of ${fun.symbol.name}")
         // traverse only continuation closure
         // constraints for args1 and args2 checked elsewhere

@@ -27,3 +27,52 @@ property set, plugin tests can be run as follows:
 
 The plugin tests are located in directory
 =plugin/src/test/scala/lacasa/=.
+
+* Example
+
+The following example shows a simple ownership transfer to a
+concurrent actor:
+
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.util.control.ControlThrowable
+import lacasa.{System, Box, CanAccess, Actor, doNothing}
+import Box._
+import scala.spores._
+
+class MyActor extends Actor[Message] {
+  override def receive(box: Box[Message])
+      (implicit acc: CanAccess { type C = box.C }) {
+    box open { msg =>
+      println(msg.arr.mkString(","))
+    }
+  }
+}
+
+class Message {
+  var arr: Array[Int] = _
+}
+
+object Transfer {
+
+  def main(args: Array[String]): Unit = try {
+    val sys = System()
+    val a = sys.actor[MyActor, Message]
+
+    // LaCasa plugin checks that `Message` is an ocap class
+    mkBox[Message] { packed =>
+      import packed.access
+      val box: packed.box.type = packed.box
+
+      // initialize object in box
+      box.open(spore { obj =>
+        obj.arr = Array(3, 4, 5)
+      })
+
+      a.send(box) { doNothing.make(box) }
+    }
+  } catch {
+    case t: ControlThrowable =>
+      Thread.sleep(1000)
+  }
+
+}

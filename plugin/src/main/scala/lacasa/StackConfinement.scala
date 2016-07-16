@@ -34,7 +34,7 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
         traverse(impl)
 
       case Template(parents, self, body) =>
-        body.foreach(t => traverse(t))
+        body.foreach(traverse)
 
       case ValDef(mods, name, tpt, rhs) =>
         traverse(rhs)
@@ -88,6 +88,11 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
         traverse(obj)
 
       case Literal(any) => /* all good */
+
+      case Try(block, catches, finalizer) =>
+        super.traverse(block)
+        catches.foreach(super.traverse)
+        super.traverse(finalizer)
 
       case unhandled =>
         log(s"unhandled tree $tree")

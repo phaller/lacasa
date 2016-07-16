@@ -27,6 +27,44 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
   class SCTraverser(unit: CompilationUnit) extends Traverser {
     var currentMethods: List[Symbol] = List()
     val stackConfined: List[Type] = List(typeOf[lacasa.Box[Any]], typeOf[lacasa.CanAccess])
+    private val ctrlThrowableClass = rootMirror.getClassByName(newTermName("scala.util.control.ControlThrowable"))
+    private val ctrlThrowableTpe = typeOf[scala.util.control.ControlThrowable]
+    private val uncheckedCatchMethod = boxModule.moduleClass.tpe.member(newTermName("uncheckedCatchControl"))
+
+    def checkPropagation(casedef: CaseDef, thenbody: Tree, rightTpe: Type): Unit = thenbody match {
+      case Block((sel @ Select(_, _)) :: moreStats, theExpr) =>
+        log(s"LLLLLLLLLLLLLLLL")
+        log(s"LLLLLLLLLLLLLLLL")
+        log(s"sel.symbol: ${sel.symbol}")
+        log(s"symbol of uncheckedCatch: $uncheckedCatchMethod")
+        if (sel.symbol == uncheckedCatchMethod) {
+          // OK: escape hatch used
+        } else {
+          reporter.error(casedef.pos, s"caught ControlThrowable of type ${rightTpe} not propagated")
+        }
+
+      case Block(Throw(theExc) :: moreStats, theExpr) =>
+        log(s"type of thrown exception: ${theExc.tpe}")
+        if (theExc.tpe <:< rightTpe) {
+          // OK if type of thrown exception subtype of caught exception
+          log(s"LLLLLLLLLLLLLLLL")
+          log(s"LLLLLLLLLLLLLLLL")
+          log(s"right.tpe:  ${rightTpe}")
+          log(s"theExc.tpe: ${theExc.tpe}")
+        } else {
+          reporter.error(casedef.pos, s"caught ControlThrowable of type ${rightTpe} not propagated")
+        }
+
+      case sel @ Select(_, _) =>
+        if (sel.symbol == uncheckedCatchMethod) {
+          // OK: escape hatch used
+        } else {
+          reporter.error(casedef.pos, s"caught ControlThrowable of type ${rightTpe} not propagated")
+        }
+
+      case other =>
+        reporter.error(casedef.pos, s"caught ControlThrowable of type ${rightTpe} not propagated")
+    }
 
     override def traverse(tree: Tree): Unit = tree match {
       case ClassDef(mods, name, tparams, impl) =>
@@ -93,6 +131,10 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
         super.traverse(block)
         catches.foreach(super.traverse)
         super.traverse(finalizer)
+
+        log(s"AAAAAAAAAAAAAAAA")
+        log(s"analyzing try:")
+        log(s"raw:\n${showRaw(tree)}")
 
       case unhandled =>
         log(s"unhandled tree $tree")

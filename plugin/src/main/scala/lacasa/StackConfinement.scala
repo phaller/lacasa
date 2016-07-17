@@ -31,39 +31,49 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
     private val ctrlThrowableTpe = typeOf[scala.util.control.ControlThrowable]
     private val uncheckedCatchMethod = boxModule.moduleClass.tpe.member(newTermName("uncheckedCatchControl"))
 
-    def checkPropagation(casedef: CaseDef, thenbody: Tree, rightTpe: Type): Unit = thenbody match {
+    /* This method checks exception handlers which catch an exception of type
+     * `ControlThrowable` or a subtype thereof.
+     *
+     * For an exception handler to be accepted by the checker its first statement
+     * must satisfy one of the following rules:
+     * - it throws an exception of a subtype of the caught exception
+     * - escape hatch: the first statement of the exception handler is
+     *   `uncheckedCatchControl`
+     *
+     * @param casedef    is only used for providing a position when reporting errors
+     * @param thenbody   body of exception handler
+     * @param caughtTpe  type of the exception that has been caught (subtype of
+     *                   `ControlThrowable`)
+     */
+    def checkPropagation(casedef: CaseDef, thenbody: Tree, caughtTpe: Type): Unit = thenbody match {
       case Block((sel @ Select(_, _)) :: moreStats, theExpr) =>
-        log(s"LLLLLLLLLLLLLLLL")
-        log(s"LLLLLLLLLLLLLLLL")
         log(s"sel.symbol: ${sel.symbol}")
         log(s"symbol of uncheckedCatch: $uncheckedCatchMethod")
         if (sel.symbol == uncheckedCatchMethod) {
           // OK: escape hatch used
         } else {
-          reporter.error(casedef.pos, s"caught ControlThrowable of type ${rightTpe} not propagated")
+          reporter.error(casedef.pos, s"caught ControlThrowable of type $caughtTpe not propagated")
         }
 
       case Block(Throw(theExc) :: moreStats, theExpr) =>
         log(s"type of thrown exception: ${theExc.tpe}")
-        if (theExc.tpe <:< rightTpe) {
+        if (theExc.tpe <:< caughtTpe) {
           // OK if type of thrown exception subtype of caught exception
-          log(s"LLLLLLLLLLLLLLLL")
-          log(s"LLLLLLLLLLLLLLLL")
-          log(s"right.tpe:  ${rightTpe}")
+          log(s"caught tpe: $caughtTpe")
           log(s"theExc.tpe: ${theExc.tpe}")
         } else {
-          reporter.error(casedef.pos, s"caught ControlThrowable of type ${rightTpe} not propagated")
+          reporter.error(casedef.pos, s"caught ControlThrowable of type $caughtTpe not propagated")
         }
 
       case sel @ Select(_, _) =>
         if (sel.symbol == uncheckedCatchMethod) {
           // OK: escape hatch used
         } else {
-          reporter.error(casedef.pos, s"caught ControlThrowable of type ${rightTpe} not propagated")
+          reporter.error(casedef.pos, s"caught ControlThrowable of type $caughtTpe not propagated")
         }
 
       case other =>
-        reporter.error(casedef.pos, s"caught ControlThrowable of type ${rightTpe} not propagated")
+        reporter.error(casedef.pos, s"caught ControlThrowable of type $caughtTpe not propagated")
     }
 
     override def traverse(tree: Tree): Unit = tree match {
@@ -79,7 +89,6 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
 
       case methodDef @ DefDef(mods, name, tparams, vparamss, tpt, rhs) =>
         log(s"checking method definition ${methodDef.symbol.name}")
-        log(s"raw:\n${showRaw(methodDef)}")
         // find out if this is a ctor of a spore or closure
         // TODO: is there a better way than string comparison with "anon"?
         if (methodDef.symbol.owner.fullName.toString.contains("anon") &&
@@ -110,8 +119,6 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
         log(s"checking apply of ${fun.symbol.name}")
         if (fun.symbol.isSetter && args.head.symbol != null) {
           val argTpe = args.head.symbol.tpe // check type of (first) arg
-          log(s"argTpe: $argTpe")
-          log(s"argTpe.finalResultType: ${argTpe.finalResultType}")
           if (stackConfined.exists(t => argTpe.finalResultType <:< t)) {
             reporter.error(args.head.pos, s"${args.head} assigned to field, but ${argTpe.finalResultType} confined to stack")
           }
@@ -119,20 +126,11 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
         traverse(fun)
         args.foreach(traverse)
 
-      case Function(vparams, body) =>
-        traverse(body)
-
-      case Select(obj, _) =>
-        traverse(obj)
-
-      case Literal(any) => /* all good */
-
       case Try(block, catches, finalizer) =>
         super.traverse(block)
         catches.foreach(super.traverse)
         super.traverse(finalizer)
 
-        log(s"AAAAAAAAAAAAAAAA")
         log(s"analyzing try:")
         log(s"raw:\n${showRaw(tree)}")
 
@@ -141,29 +139,14 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
             case Block(stats, expr) =>
               stats(1) match {
                 case LabelDef(n, l, If(cond, thenp, elsep)) =>
-                  log(s"KKKKKKKKKKKKKKKK")
-                  log(s"KKKKKKKKKKKKKKKK")
-                  log(s"KKKKKKKKKKKKKKKK")
-                  log(s"KKKKKKKKKKKKKKKK")
-                  log(s"KKKKKKKKKKKKKKKK")
                   cond match {
                     case TypeApply(left, List(right)) =>
-                      log(s"$right")
+                      // catching a subtype of `ControlThrowable`
                       if (right.tpe <:< ctrlThrowableTpe) {
-                        log(s"KKKKKKKKKKKKKKKK")
-                        log(s"KKKKKKKKKKKKKKKK")
-                        log(s"KKKKKKKKKKKKKKKK")
-                        log(s"KKKKKKKKKKKKKKKK")
-                        log(s"KKKKKKKKKKKKKKKK")
                         thenp match {
                           case Apply(_, List(thenbody)) =>
-                            log(s"THE THEN PART (1):")
-                            log(s"${showRaw(thenbody)}")
                             checkPropagation(casedef, thenbody, right.tpe)
-
                           case Block(_, Apply(_, List(thenbody))) =>
-                            log(s"THE THEN PART (2):")
-                            log(s"${showRaw(thenbody)}")
                             checkPropagation(casedef, thenbody, right.tpe)
                         }
                       }
@@ -174,9 +157,7 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
           }
         }
 
-      case unhandled =>
-        log(s"unhandled tree $tree")
-        log(s"raw:\n${showRaw(tree)}")
+      case other =>
         super.traverse(tree)
     }
   }

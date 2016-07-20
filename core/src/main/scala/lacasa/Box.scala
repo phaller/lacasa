@@ -12,7 +12,10 @@ private class NoReturnControl extends ControlThrowable {
   final override def fillInStackTrace(): Throwable = this
 }
 
-/*sealed*/ class CanAccess {
+/* Class *must* be sealed, so that no class outside this
+ * source file can mix in CanAccess.
+ */
+sealed class CanAccess {
   type C
 }
 

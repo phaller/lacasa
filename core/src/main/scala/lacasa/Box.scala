@@ -20,14 +20,6 @@ sealed class CanAccess {
 }
 
 object Box {
-  /*private*/ def make[T](init: T): Box[T] = {
-    def internal[S]: Box[T] = {
-      new Box[T](init) {
-        type C = S
-      }
-    }
-    internal[Int]
-  }
 
   def mkBox[T: ClassTag](spore: Packed[T] => Unit): Nothing = {
     val cl = classTag[T].runtimeClass
@@ -40,6 +32,16 @@ object Box {
 
   // marker method as escape hatch for ControlThrowable checker
   def uncheckedCatchControl: Unit = {}
+
+  /* for internal use only! */
+  private[lacasa] def make[T](init: T): Box[T] = {
+    def internal[S]: Box[T] = {
+      new Box[T](init) {
+        type C = S
+      }
+    }
+    internal[Int]
+  }
 }
 
 sealed trait OnlyNothing[T]

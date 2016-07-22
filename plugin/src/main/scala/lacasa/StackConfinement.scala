@@ -24,6 +24,28 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
   val boxOpenMethod = boxClass.tpe.member(newTermName("open"))
   val boxSwapMethod = boxClass.tpe.member(newTermName("swap"))
 
+  /* Checks whether the owner chain of `sym` contains `owner`.
+   *
+   * @param sym   the symbol to be checked
+   * @param owner the owner symbol that we try to find
+   * @return      whether `owner` is a direct or indirect owner of `sym`
+   */
+  def ownerChainContains(sym: Symbol, owner: Symbol): Boolean =
+    sym != null && (sym.owner == owner || {
+      sym.owner != NoSymbol && ownerChainContains(sym.owner, owner)
+    })
+
+  /* Checks whether `member` is selected from a static selector, or whether
+   * its selector is transitively selected from a static symbol.
+   */
+  def selectorIsStatic(member: Tree): Boolean = member match {
+    case Select(selector, member0) =>
+      val selStatic = selector.symbol.isStatic
+      log(s"checking whether $selector is static...$selStatic")
+      selStatic || selectorIsStatic(selector)
+    case _ => false
+  }
+
   class SCTraverser(unit: CompilationUnit) extends Traverser {
     var currentMethods: List[Symbol] = List()
     val stackConfined: List[Type] = List(typeOf[lacasa.Box[Any]], typeOf[lacasa.CanAccess])
@@ -99,6 +121,88 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
           traverse(rhs)
           currentMethods = currentMethods.tail
         }
+
+      case fun @ Function(vparams, body) =>
+        super.traverse(body)
+        log(s"checking function literal:\n${showRaw(tree)}")
+
+        // check variables used within function body
+        // if a symbol has a type which is a permission or a box, then
+        // it must be declared within the function
+        def isSymbolValid(sym: Symbol): Boolean = {
+          sym == NoSymbol ||
+          sym.owner == definitions.PredefModule ||
+          !stackConfined.exists(t => sym.tpe.finalResultType <:< t) ||
+          ownerChainContains(sym, fun.symbol)
+        }
+
+        def isPathValid(tree: Tree): (Boolean, Option[Tree]) = {
+          log(s"checking isPathValid for $tree [${tree.symbol}]...")
+          log(s"tree class: ${tree.getClass.getName}")
+          if (tree.symbol != null) {
+            if (isSymbolValid(tree.symbol)) (true, None)
+            else (false, None)
+          } else {
+            tree match {
+              case Select(pre, sel) =>
+                log(s"case 1: Select($pre, $sel)")
+                isPathValid(pre)
+              case Apply(Select(pre, _), _) =>
+                log(s"case 2: Apply(Select, _)")
+                isPathValid(pre)
+              case TypeApply(Select(pre, _), _) =>
+                log("case 3: TypeApply(Select, _)")
+                isPathValid(pre)
+              case TypeApply(fun, _) =>
+                log("case 4: TypeApply")
+                isPathValid(fun)
+              case Literal(Constant(_)) | New(_) =>
+                (true, None)
+              case id: Ident =>
+                (isSymbolValid(id.symbol), None)
+              case _ =>
+                log("case 7: _")
+                (false, Some(tree))
+            }
+          }
+        }
+
+        val traverser = new Traverser {
+          override def traverse(tree: Tree) {
+            tree match {
+              case vd @ ValDef(mods, name, tpt, rhs) =>
+                super.traverse(tree)
+
+              case id: Ident =>
+                log("checking ident " + id)
+                if (!isSymbolValid(id.symbol))
+                  reporter.error(tree.pos, "invalid reference to " + id.symbol)
+
+              case th: This =>
+                reporter.error(tree.pos, "invalid reference to " + th.symbol)
+
+              case sel @ Select(pre, _) =>
+                log("checking select " + sel)
+
+                val resTup = isPathValid(sel)
+                log(s"resTup: $resTup")
+                resTup match {
+                  case (false, None) =>
+                    reporter.error(tree.pos, s"${sel.symbol} captured, but ${sel.symbol.tpe.finalResultType} confined to stack")
+                  case (false, Some(subtree)) =>
+                    traverse(subtree)
+                  case (true, None) =>
+                    // do nothing
+                  case (true, Some(subtree)) =>
+                    // do nothing
+                }
+
+              case _ =>
+                super.traverse(tree)
+            }
+          }
+        }
+        traverser.traverse(body)
 
       case Apply(Select(New(id), _), args) =>
         log(s"checking constructor invocation $id")

@@ -5,7 +5,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 import scala.util.control.ControlThrowable
 
-import lacasa.{System, Box, Packed, CanAccess, Actor, ActorRef, doNothing, sleep}
+import lacasa.{LaCasaApp, System, Box, Packed, CanAccess, Actor, ActorRef, doNothing, sleep}
 import Box._
 
 import scala.spores._
@@ -61,8 +61,15 @@ class ActorB extends Actor[C] {
   }
 }
 
-object Transfer {
-  def main(args: Array[String]): Unit = try {
+/* expected output:
+   ActorA received container
+   1,2,3,4
+   ActorB received object with array
+   1000,2,3,4
+ */
+object Transfer extends LaCasaApp {
+
+  def lcMain(args: Array[String]): Unit = {
     val sys = System()
     val b = sys.actor[ActorB, C]
     val a = sys.actor[Container](new ActorA(b))
@@ -95,9 +102,6 @@ object Transfer {
         )
       }
     }
-  } catch {
-    case _: ControlThrowable =>
-      uncheckedCatchControl
-      /* do nothing */
   }
+
 }

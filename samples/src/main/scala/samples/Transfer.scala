@@ -67,6 +67,8 @@ class Start {
   var next: ActorRef[Message] = _
 }
 
+// expected output:
+// 1,2,3,4
 object Transfer {
 
   def main(args: Array[String]): Unit = try {

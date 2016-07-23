@@ -1,11 +1,10 @@
 package lacasa.samples
 
-import scala.util.control.ControlThrowable
-
-import lacasa.{Box, CanAccess}
-import Box._
+import lacasa.{LaCasaApp, Box, CanAccess}
+import Box._  // imports `mkBox`
 
 import scala.spores._
+
 
 class Test {
   var arr: Array[Int] = _
@@ -38,12 +37,12 @@ class HasState {
   }
 }
 
-object Borrow {
+object Borrow extends LaCasaApp {
 
   // expected output:
   // 6,10
   // 0,0,0
-  def main(args: Array[String]): Unit = try {
+  def lcMain(args: Array[String]): Unit = {
     val hs = new HasState
 
     mkBox[Test] { packed1 =>
@@ -64,9 +63,5 @@ object Borrow {
         })
       }
     }
-  } catch {
-    case t: ControlThrowable =>
-      uncheckedCatchControl
-      Thread.sleep(1000)
   }
 }

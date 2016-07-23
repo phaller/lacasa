@@ -1,3 +1,6 @@
+/**
+ * Copyright (C) 2015-2016 Philipp Haller
+ */
 package lacasa.test
 
 import org.junit.Test

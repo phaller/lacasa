@@ -1,3 +1,6 @@
+/**
+ * Copyright (C) 2015-2016 Philipp Haller
+ */
 package lacasa.test.uniqueness2
 
 import org.junit.Test

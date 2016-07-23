@@ -1,3 +1,6 @@
+/**
+ * Copyright (C) 2015-2016 Philipp Haller
+ */
 package lacasa
 
 import java.util.concurrent.locks.{Lock, ReentrantLock}

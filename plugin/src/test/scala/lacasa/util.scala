@@ -49,6 +49,12 @@ object util {
     f.getAbsolutePath
   }
 
+  def sporesClasspath: String = {
+    val f = new java.io.File(s"lib/spores-core_2.11.jar")
+    if (!f.exists) sys.error(s"jar file ${f.getAbsolutePath} does not exist.")
+    f.getAbsolutePath
+  }
+
   def pluginPath: String = {
     val path = java.lang.System.getProperty("lacasa.plugin.jar")
     val f = new java.io.File(path)
@@ -58,7 +64,7 @@ object util {
   }
 
   def expectError(errorSnippet: String, compileOptions: String = "",
-                  baseCompileOptions: String = s"-cp ${toolboxClasspath} -Xplugin:${pluginPath}")(code: String) {
+                  baseCompileOptions: String = s"-cp ${toolboxClasspath}:${sporesClasspath} -Xplugin:${pluginPath}")(code: String) {
     intercept[ToolBoxError] {
       eval(code, compileOptions + " " + baseCompileOptions)
     }.getMessage mustContain errorSnippet

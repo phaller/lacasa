@@ -48,10 +48,19 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
 
   class SCTraverser(unit: CompilationUnit) extends Traverser {
     var currentMethods: List[Symbol] = List()
-    val stackConfined: List[Type] = List(typeOf[lacasa.Box[Any]], typeOf[lacasa.CanAccess])
+    val stackConfined: List[Type] = List(typeOf[lacasa.Box[Any]], typeOf[lacasa.CanAccess], typeOf[lacasa.Packed[Any]])
     private val ctrlThrowableClass = rootMirror.getClassByName(newTermName("scala.util.control.ControlThrowable"))
     private val ctrlThrowableTpe = typeOf[scala.util.control.ControlThrowable]
     private val uncheckedCatchMethod = boxModule.moduleClass.tpe.member(newTermName("uncheckedCatchControl"))
+
+    private var SCFunStack: List[Boolean] = List(false)
+    def withinSCFun: Boolean = SCFunStack.head
+    def enterSCFun(): Unit = {
+      SCFunStack = true :: SCFunStack
+    }
+    def exitSCFun(): Unit = {
+      SCFunStack = SCFunStack.tail
+    }
 
     /* This method checks exception handlers which catch an exception of type
      * `ControlThrowable` or a subtype thereof.
@@ -98,6 +107,66 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
         reporter.error(casedef.pos, s"caught ControlThrowable of type $caughtTpe not propagated")
     }
 
+    // check variables used within function body
+    // if a symbol has a type which is a permission or a box, then
+    // it must be declared within the function
+    def isSymbolValid(sym: Symbol, fun: Tree): Boolean = {
+      sym == NoSymbol ||
+      sym.owner == definitions.PredefModule ||
+      !stackConfined.exists(t => sym.tpe.finalResultType <:< t) ||
+      ownerChainContains(sym, fun.symbol)
+    }
+
+    def isPathValid(tree: Tree, fun: Tree): (Boolean, Option[Tree]) = {
+      log(s"checking isPathValid for $tree [${tree.symbol}]...")
+      log(s"tree class: ${tree.getClass.getName}")
+      if (tree.symbol != null) {
+        if (isSymbolValid(tree.symbol, fun)) (true, None)
+        else (false, None)
+      } else {
+        tree match {
+          case Select(pre, sel) =>
+            log(s"case 1: Select($pre, $sel)")
+            isPathValid(pre, fun)
+          case Apply(Select(pre, _), _) =>
+            log(s"case 2: Apply(Select, _)")
+            isPathValid(pre, fun)
+          case TypeApply(Select(pre, _), _) =>
+            log("case 3: TypeApply(Select, _)")
+            isPathValid(pre, fun)
+          case TypeApply(fun, _) =>
+            log("case 4: TypeApply")
+            isPathValid(fun, fun)
+          case Literal(Constant(_)) | New(_) =>
+            (true, None)
+          case id: Ident =>
+            (isSymbolValid(id.symbol, fun), None)
+          case _ =>
+            log("case 7: _")
+            (false, Some(tree))
+        }
+      }
+    }
+
+    def traverseFunBody(body: Tree, fun: Tree): Unit = {
+      log(s"checking function literal:\n${showRaw(fun)}")
+      val traverser = new Traverser {
+        override def traverse(tree: Tree): Unit = {
+          tree match {
+            case id: Ident =>
+              log("checking ident " + id)
+              if (!withinSCFun && !isSymbolValid(id.symbol, fun))
+                reporter.error(tree.pos, s"${id.symbol} captured, but ${id.symbol.tpe.finalResultType} confined to stack")
+              else
+                log(s"ident $id OK")
+            case _ =>
+              super.traverse(tree)
+          }
+        }
+      }
+      traverser.traverse(body)
+    }
+
     override def traverse(tree: Tree): Unit = tree match {
       case ClassDef(mods, name, tparams, impl) =>
         log(s"checking class $name")
@@ -123,86 +192,12 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
         }
 
       case fun @ Function(vparams, body) =>
-        super.traverse(body)
-        log(s"checking function literal:\n${showRaw(tree)}")
+        vparams.foreach(traverse)
+        traverse(body)
 
-        // check variables used within function body
-        // if a symbol has a type which is a permission or a box, then
-        // it must be declared within the function
-        def isSymbolValid(sym: Symbol): Boolean = {
-          sym == NoSymbol ||
-          sym.owner == definitions.PredefModule ||
-          !stackConfined.exists(t => sym.tpe.finalResultType <:< t) ||
-          ownerChainContains(sym, fun.symbol)
-        }
-
-        def isPathValid(tree: Tree): (Boolean, Option[Tree]) = {
-          log(s"checking isPathValid for $tree [${tree.symbol}]...")
-          log(s"tree class: ${tree.getClass.getName}")
-          if (tree.symbol != null) {
-            if (isSymbolValid(tree.symbol)) (true, None)
-            else (false, None)
-          } else {
-            tree match {
-              case Select(pre, sel) =>
-                log(s"case 1: Select($pre, $sel)")
-                isPathValid(pre)
-              case Apply(Select(pre, _), _) =>
-                log(s"case 2: Apply(Select, _)")
-                isPathValid(pre)
-              case TypeApply(Select(pre, _), _) =>
-                log("case 3: TypeApply(Select, _)")
-                isPathValid(pre)
-              case TypeApply(fun, _) =>
-                log("case 4: TypeApply")
-                isPathValid(fun)
-              case Literal(Constant(_)) | New(_) =>
-                (true, None)
-              case id: Ident =>
-                (isSymbolValid(id.symbol), None)
-              case _ =>
-                log("case 7: _")
-                (false, Some(tree))
-            }
-          }
-        }
-
-        val traverser = new Traverser {
-          override def traverse(tree: Tree) {
-            tree match {
-              case vd @ ValDef(mods, name, tpt, rhs) =>
-                super.traverse(tree)
-
-              case id: Ident =>
-                log("checking ident " + id)
-                if (!isSymbolValid(id.symbol))
-                  reporter.error(tree.pos, "invalid reference to " + id.symbol)
-
-              case th: This =>
-                reporter.error(tree.pos, "invalid reference to " + th.symbol)
-
-              case sel @ Select(pre, _) =>
-                log("checking select " + sel)
-
-                val resTup = isPathValid(sel)
-                log(s"resTup: $resTup")
-                resTup match {
-                  case (false, None) =>
-                    reporter.error(tree.pos, s"${sel.symbol} captured, but ${sel.symbol.tpe.finalResultType} confined to stack")
-                  case (false, Some(subtree)) =>
-                    traverse(subtree)
-                  case (true, None) =>
-                    // do nothing
-                  case (true, Some(subtree)) =>
-                    // do nothing
-                }
-
-              case _ =>
-                super.traverse(tree)
-            }
-          }
-        }
-        traverser.traverse(body)
+        SCFunStack = false :: SCFunStack
+        traverseFunBody(body, fun)
+        SCFunStack = SCFunStack.tail
 
       case Apply(Select(New(id), _), args) =>
         log(s"checking constructor invocation $id")
@@ -218,9 +213,27 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
         // constraints for args1 and args2 checked elsewhere
         traverse(b)
 
+      case Apply(fun, args) if fun.symbol == boxCreationMethod =>
+        log(s"checking apply of ${fun.symbol.name}:\n${showRaw(tree)}")
+        fun match {
+          case Apply(nestedFun, nestedArgs) =>
+            nestedArgs.head match {
+              case fun @ Function(vps, b) =>
+                vps.foreach(traverse)
+                traverse(b)
+
+                enterSCFun()
+                traverseFunBody(b, fun)
+                exitSCFun()
+            }
+            nestedArgs.tail.foreach(traverse)
+          case otherNested =>
+        }
+        args.foreach(traverse)
+
       // apply may be a setter
       case Apply(fun, args) =>
-        log(s"checking apply of ${fun.symbol.name}")
+        log(s"checking apply of ${fun.symbol.name}:\n${showRaw(tree)}")
         if (fun.symbol.isSetter && args.head.symbol != null) {
           val argTpe = args.head.symbol.tpe // check type of (first) arg
           if (stackConfined.exists(t => argTpe.finalResultType <:< t)) {

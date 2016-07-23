@@ -412,6 +412,9 @@ class Plugin(val global: Global) extends NscPlugin {
           currentMethods = currentMethods.tail
 
         case TypeApply(fun, args) =>
+          traverse(fun)
+          args.foreach(traverse)
+
           // check for selection of box creation method: Box.mkBox[C] { ... }
           if (fun.symbol == boxCreationMethod)
             requireOcap(args.head.symbol)
@@ -454,7 +457,9 @@ class Plugin(val global: Global) extends NscPlugin {
                           if (tparg != null && tparg.symbol != null && !tparg.symbol.isAbstractType)
                             requireOcap(tparg.symbol)
                         }
-                      case _ => /* do nothing */
+                      case other =>
+                        // other may be `null`, therefore require `id.symbol`
+                        requireOcap(id.symbol)
                     }
 
                   case other => // non-empty TypeTree: check its symbol directly

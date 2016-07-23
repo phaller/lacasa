@@ -28,4 +28,28 @@ class Stack2Spec {
       """
     }
   }
+
+  @Test
+  def test2() {
+    println(s"Stack2Spec.test2")
+    expectError("propagated") {
+      """
+        class D { var arr: Array[Int] = _ }
+        class C {
+          import scala.spores._
+          import lacasa.Box
+          def m(): Unit = {
+            try {
+              Box.mkBox[D] { packed =>
+                val access = packed.access
+              }
+            } catch {
+              case ct: scala.util.control.ControlThrowable =>
+            }
+          }
+        }
+      """
+    }
+  }
+
 }

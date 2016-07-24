@@ -49,7 +49,7 @@ class ActorA(next: ActorRef[Msg]) extends Actor[Msg] {
               ping => ping.sender = localSelf
             })
 
-            nextRef.send(box) { doNothing.make(packed.box) }
+            nextRef.send(box) { doNothing.consume(packed.box) }
           }
 
         case pong: Pong =>
@@ -69,7 +69,7 @@ class ActorA(next: ActorRef[Msg]) extends Actor[Msg] {
                   ping.count  = localCount + 1
               })
 
-              nextRef.send(box) { doNothing.make(packed.box) }
+              nextRef.send(box) { doNothing.consume(packed.box) }
             }
           }
       }
@@ -96,7 +96,7 @@ class ActorB(p: Promise[Boolean]) extends Actor[Msg] {
                   pong.count  = localCount
               })
 
-              ping.sender.send(box) { doNothing.make(packed.box) }
+              ping.sender.send(box) { doNothing.consume(packed.box) }
             }
 
           }
@@ -122,7 +122,7 @@ class Spec {
       mkBox[Start] { packed =>
         import packed.access
         val box: packed.box.type = packed.box
-        a.send(box) { doNothing.make(packed.box) }
+        a.send(box) { doNothing.consume(packed.box) }
       }
     } catch {
       case t: Throwable =>

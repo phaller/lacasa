@@ -18,7 +18,8 @@ class HasState {
   var i1 = 5
   var i2 = 10
 
-  def m(box1: Box[Test], box2: Box[Test])(implicit a1: CanAccess {type C = box1.C}, a2: CanAccess {type C = box2.C}): Unit = {
+  def m(box1: Box[Test], box2: Box[Test])
+       (implicit a1: CanAccess {type C = box1.C}, a2: CanAccess {type C = box2.C}): Unit = {
     // 1. mutate own state
     this.i1 = 6
 

@@ -38,7 +38,7 @@ class ActorA extends Actor[Any] {
             msg.arr = Array(1, 2, 3, 4)
           }
           s.next.send(packed.box) {
-            doNothing.make(packed.box)
+            doNothing.consume(packed.box)
           }
         }
       case other => // ...
@@ -89,7 +89,7 @@ object Transfer {
         obj.next = innerSys.actor[ActorB, Message]
       })
 
-      a.send(box) { doNothing.make(box) }
+      a.send(box) { doNothing.consume(box) }
     }
   } catch {
     case t: ControlThrowable =>

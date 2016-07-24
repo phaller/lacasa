@@ -49,7 +49,7 @@ class ActorA(next: ActorRef[C]) extends Actor[Container] {
             part1Obj.arr(0) = 1000
           }
 
-          next.send(part1) { doNothing.make(part1) }
+          next.send(part1) { doNothing.consume(part1) }
         })
     }
   }
@@ -100,7 +100,7 @@ object Transfer extends LaCasaApp {
                 import packed.access
                 val ignore = packed.box
 
-                localA.send(localContainerBox) { sleep.make(localContainerBox)(500) }
+                localA.send(localContainerBox) { sleep.consume(localContainerBox)(500) }
           }
         )
       }

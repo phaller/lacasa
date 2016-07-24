@@ -14,6 +14,8 @@ package lacasa
   */
 trait LaCasaApp {
 
+  val terminateAfter: Long = 0L
+
   def lcMain(args: Array[String]): Unit
 
   def main(args: Array[String]): Unit = try {
@@ -21,6 +23,7 @@ trait LaCasaApp {
   } catch {
     case _: NoReturnControl =>
       Box.uncheckedCatchControl
+      Thread.sleep(terminateAfter)
   }
 
 }

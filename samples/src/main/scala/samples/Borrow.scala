@@ -35,7 +35,7 @@ class HasState {
         t.arr = Array(local1, local2)
     })
 
-    box2.open(spore {
+    box2.open({
       (t: Test) => t.arr = Array(0, 0, 0)
     })
   }
@@ -59,10 +59,10 @@ object Borrow extends LaCasaApp {
         hs.m(packed1.box, packed2.box)
 
         // open boxes to print their contents
-        packed1.box.open(spore {
+        packed1.box.open({
           (t: Test) => println(t.arr.mkString(","))
         })
-        packed2.box.open(spore {
+        packed2.box.open({
           (t: Test) => println(t.arr.mkString(","))
         })
       }

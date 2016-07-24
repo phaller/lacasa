@@ -13,7 +13,7 @@ import scala.spores.NullarySpore
 
 
 object doNothing {
-  def make[T](box: Box[T]): NullarySpore[Unit] { type Excluded = box.C } =
+  def consume[T](box: Box[T]): NullarySpore[Unit] { type Excluded = box.C } =
     new NullarySpore[Unit] {
       type Captured = Nothing
       type Excluded = box.C
@@ -22,7 +22,7 @@ object doNothing {
 }
 
 object sleep {
-  def make[T](box: Box[T])(millis: Long): NullarySpore[Unit] { type Excluded = box.C } =
+  def consume[T](box: Box[T])(millis: Long): NullarySpore[Unit] { type Excluded = box.C } =
     new NullarySpore[Unit] {
       type Captured = Nothing
       type Excluded = box.C
@@ -195,4 +195,8 @@ class System private[lacasa] (implicit context: ExecutionContext) {
     new InternalActorRef(instance)
   }
 
+}
+
+object LaCasa {
+  val system = System()(ExecutionContext.Implicits.global)
 }

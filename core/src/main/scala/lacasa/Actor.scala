@@ -32,6 +32,23 @@ object sleep {
     }
 }
 
+/**
+  * LaCasa guarantees isolation of actors even in the presence of a
+  * shared heap and mutable objects sent as messages. However, this
+  * requires an integration of LaCasa's abstractions, boxes and
+  * permissions, with actors.
+  *
+  * LaCasa provides prototype `Actor` and `ActorRef` library classes,
+  * but the intended usage consists of a bridge between LaCasa and
+  * Scala's standard actor library, Akka.
+  *
+  * LaCasa introduces two main changes to the `Actor` and `ActorRef`
+  * library classes: first, actors send and receive boxes of type
+  * `Box[T]`, rather than direct object references. (LaCasa's type
+  * system enforces strong encapsulation properties for boxes.)
+  * Second, the type of the `receive` method is changed to
+  * additionally include an implicit permission parameter.
+  */
 abstract class Actor[T] {
 
   private val buffer = Buffer.empty[Packed[T]]
@@ -55,7 +72,7 @@ abstract class Actor[T] {
     try {
       if (idle) {
         idle = false
-        val task = new BufferProcessor(packed)
+        val task = new MessageHandlerTask(this, packed)
         context.execute(task)
       } else {
         buffer += packed
@@ -71,35 +88,54 @@ abstract class Actor[T] {
     throw new NoReturnControl
   }
 
-  private class BufferProcessor(packed: Packed[T]) extends Runnable {
-    def run(): Unit = {
-      val localPacked = packed
-      import localPacked.access
-
-      try {
-        // process message
-        receive(localPacked.box)
-      } catch {
-        case nrc: NoReturnControl => /* do nothing */
+  private[lacasa] def checkForNextMessage(): Unit = {
+    lock.lock()
+    try {
+      if (buffer.isEmpty) {
+        idle = true
+      } else {
+        val task = new MessageHandlerTask(this, buffer.remove(0))
+        context.execute(task)
       }
-
-      // check for next message
-      lock.lock()
-      try {
-        if (buffer.isEmpty) {
-          idle = true
-        } else {
-          val task = new BufferProcessor(buffer.remove(0))
-          context.execute(task)
-        }
-      } finally {
-        lock.unlock()
-      }
+    } finally {
+      lock.unlock()
     }
   }
-
 }
 
+private[lacasa] class MessageHandlerTask[T](
+                        receiver: Actor[T],
+                        packed: Packed[T]) extends Runnable {
+  def run(): Unit = {
+    // process message in 'packed' object
+    try {
+      // process message
+      receiver.receive(packed.box)(packed.access)
+    } catch {
+      case nrc: NoReturnControl => /* do nothing */
+    }
+    // check for next message
+    receiver.checkForNextMessage()
+  }
+}
+
+/**
+  * LaCasa guarantees isolation of actors even in the presence of a
+  * shared heap and mutable objects sent as messages. However, this
+  * requires an integration of LaCasa's abstractions, boxes and
+  * permissions, with actors.
+  *
+  * LaCasa provides prototype `Actor` and `ActorRef` library classes,
+  * but the intended usage consists of a bridge between LaCasa and
+  * Scala's standard actor library, Akka.
+  *
+  * LaCasa introduces two main changes to the `Actor` and `ActorRef`
+  * library classes: first, actors send and receive boxes of type
+  * `Box[T]`, rather than direct object references. (LaCasa's type
+  * system enforces strong encapsulation properties for boxes.)
+  * Second, the type of the `receive` method is changed to
+  * additionally include an implicit permission parameter.
+  */
 abstract class ActorRef[T] {
   def send(msg: Box[T])(cont: NullarySpore[Unit] { type Excluded = msg.C })
           (implicit acc: CanAccess { type C = msg.C }): Nothing

@@ -34,4 +34,44 @@ class ControlThrowableSpec {
       """
     }
   }
+
+  @Test
+  def test2() {
+    println(s"ControlThrowableSpec.test2")
+    expectError("propagated") {
+      """
+        class C {
+          import scala.util.control.ControlThrowable
+          def m(): Unit = {
+            try {
+              throw new ControlThrowable {}
+            } catch {
+              case t: Throwable =>
+                println("hello")
+            }
+          }
+        }
+      """
+    }
+  }
+
+  @Test
+  def test3() {
+    println(s"ControlThrowableSpec.test3")
+    expectError("propagated") {
+      """
+        class SpecialException(msg: String) extends RuntimeException
+        class C {
+          import scala.util.control.ControlThrowable
+          def m(): Unit = {
+            val res = try { 5 } catch {
+              case s: SpecialException => println("a")
+              case c: ControlThrowable => println("b")
+              case t: Throwable => println("c")
+            }
+          }
+        }
+      """
+    }
+  }
 }

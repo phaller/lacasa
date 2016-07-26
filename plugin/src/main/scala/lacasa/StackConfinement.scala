@@ -52,8 +52,10 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
   class SCTraverser(unit: CompilationUnit) extends Traverser {
     var currentMethods: List[Symbol] = List()
     val stackConfined: List[Type] = List(typeOf[lacasa.Box[Any]], typeOf[lacasa.CanAccess], typeOf[lacasa.Packed[Any]])
-    private val ctrlThrowableClass = rootMirror.getClassByName(newTermName("scala.util.control.ControlThrowable"))
+
+    private val throwableTpe = typeOf[java.lang.Throwable]
     private val ctrlThrowableTpe = typeOf[scala.util.control.ControlThrowable]
+    private val ctrlThrowableClass = rootMirror.getClassByName(newTermName("scala.util.control.ControlThrowable"))
     private val uncheckedCatchMethod = boxModule.moduleClass.tpe.member(newTermName("uncheckedCatchControl"))
 
     private var SCFunStack: List[Boolean] = List(false)
@@ -63,6 +65,30 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
     }
     def exitSCFun(): Unit = {
       SCFunStack = SCFunStack.tail
+    }
+
+    def isPropagating(casedef: CaseDef, thenbody: Tree, caughtTpe: Type): Boolean = thenbody match {
+      case Block((sel @ Select(_, _)) :: moreStats, theExpr) if sel.symbol == uncheckedCatchMethod => // OK: escape hatch used
+        true
+
+      case Block(Throw(theExc) :: moreStats, theExpr) if theExc.tpe <:< caughtTpe => // OK: type of thrown exception subtype of caught exception
+        true
+
+      case sel @ Select(_, _) if sel.symbol == uncheckedCatchMethod => // OK: escape hatch used
+        true
+
+      case Throw(theExc) if theExc.tpe <:< caughtTpe => // OK: type of thrown exception subtype of caught exception
+        true
+
+      case other =>
+        false
+    }
+
+    def isPropagatingApply(casedef: CaseDef, thenp: Tree, caughtTpe: Type): Boolean = thenp match {
+      case Apply(_, List(thenbody)) =>
+        isPropagating(casedef, thenbody, caughtTpe)
+      case Block(_, Apply(_, List(thenbody))) =>
+        isPropagating(casedef, thenbody, caughtTpe)
     }
 
     /* This method checks exception handlers which catch an exception of type
@@ -79,36 +105,13 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
      * @param caughtTpe  type of the exception that has been caught (subtype of
      *                   `ControlThrowable`)
      */
-    def checkPropagation(casedef: CaseDef, thenbody: Tree, caughtTpe: Type): Unit = thenbody match {
-      case Block((sel @ Select(_, _)) :: moreStats, theExpr) =>
-        log(s"sel.symbol: ${sel.symbol}")
-        log(s"symbol of uncheckedCatch: $uncheckedCatchMethod")
-        if (sel.symbol == uncheckedCatchMethod) {
-          // OK: escape hatch used
-        } else {
-          reporter.error(casedef.pos, s"caught ControlThrowable of type $caughtTpe not propagated")
-        }
-
-      case Block(Throw(theExc) :: moreStats, theExpr) =>
-        log(s"type of thrown exception: ${theExc.tpe}")
-        if (theExc.tpe <:< caughtTpe) {
-          // OK if type of thrown exception subtype of caught exception
-          log(s"caught tpe: $caughtTpe")
-          log(s"theExc.tpe: ${theExc.tpe}")
-        } else {
-          reporter.error(casedef.pos, s"caught ControlThrowable of type $caughtTpe not propagated")
-        }
-
-      case sel @ Select(_, _) =>
-        if (sel.symbol == uncheckedCatchMethod) {
-          // OK: escape hatch used
-        } else {
-          reporter.error(casedef.pos, s"caught ControlThrowable of type $caughtTpe not propagated")
-        }
-
-      case other =>
+    def checkPropagation(casedef: CaseDef, thenbody: Tree, caughtTpe: Type): Unit =
+      if (!isPropagating(casedef, thenbody, caughtTpe))
         reporter.error(casedef.pos, s"caught ControlThrowable of type $caughtTpe not propagated")
-    }
+
+    def checkPropagatingApply(casedef: CaseDef, thenp: Tree, caughtTpe: Type): Unit =
+      if (!isPropagatingApply(casedef, thenp, caughtTpe))
+        reporter.error(casedef.pos, s"caught ControlThrowable of type $caughtTpe not propagated")
 
     // check variables used within function body
     // if a symbol has a type which is a permission or a box, then
@@ -257,23 +260,48 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
         catches.foreach { case casedef @ CaseDef(pat, guard, body) =>
           body match {
             case Block(stats, expr) =>
-              stats(1) match {
-                case LabelDef(n, l, If(cond, thenp, elsep)) =>
-                  cond match {
-                    case TypeApply(left, List(right)) =>
-                      // catching a subtype of `ControlThrowable`
-                      if (right.tpe <:< ctrlThrowableTpe) {
-                        thenp match {
-                          case Apply(_, List(thenbody)) =>
-                            checkPropagation(casedef, thenbody, right.tpe)
-                          case Block(_, Apply(_, List(thenbody))) =>
-                            checkPropagation(casedef, thenbody, right.tpe)
-                        }
-                      }
-                  }
-                case otherwise => log(s"no labeldef here")
+              // stats(0) is a ValDef
+
+              // collect indices with LabelDefs
+              val labelIndices = stats.zipWithIndex.flatMap { case (stmt, i) =>
+                stmt match {
+                  case LabelDef(_, _, _) => List(i)
+                  case _ => List()
+                }
               }
-            case other => log(s"not a block here")
+
+              // indices of cases that propagate subtypes of ControlThrowable
+              val propagating = stats.zipWithIndex.flatMap { case (stmt, i) =>
+                stmt match {
+                  case LabelDef(_, _, If(TypeApply(_, List(right)), thenp, _)) =>
+                    if (isPropagatingApply(casedef, thenp, right.tpe)) List(i)
+                    else List()
+                  case _ =>
+                    List()
+                }
+              }
+
+              labelIndices.foreach { i =>
+                stats(i) match {
+                  case LabelDef(n, l, If(cond, thenp, elsep)) =>
+                    log(s"checking label def '$n'...")
+                    cond match {
+                      case TypeApply(left, List(right)) =>
+                        // catching a subtype of `ControlThrowable`
+                        if (right.tpe <:< ctrlThrowableTpe) {
+                          checkPropagatingApply(casedef, thenp, right.tpe)
+                        }
+                      case _ => /* do nothing */
+                    }
+                  case otherwise => log(s"no labeldef here")
+                }
+              }
+            case other =>
+              pat match {
+                case Bind(name, b) if b.tpe <:< ctrlThrowableTpe || throwableTpe <:< b.tpe =>
+                  checkPropagation(casedef, body, b.tpe)
+                case _ => /* do nothing */
+              }
           }
         }
 

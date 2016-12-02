@@ -104,6 +104,27 @@ sealed class Box[+T] private (private val instance: T) {
     }
     throw new NoReturnControl
   }
+
+  /* Captures the `consumed` box, and merges it into `self`.
+   * In the continuation `fun`, box `self` is open.
+   *
+   * The argument `assign` must have the form `(x, y) => x.f = y`.
+   */
+  def capture[S](consumed: Box[S])(assign: (T, S) => Unit)(
+    fun: Spore[T, Unit] { type Excluded = consumed.C })(
+    implicit access: CanAccess { type C = self.C },
+      accessConsumed: CanAccess { type C = consumed.C },
+      noCapture: OnlyNothing[fun.Captured]): Nothing = {
+
+    // do the assignment
+    assign(instance, consumed.instance)
+
+    // invoke continuation
+    fun(instance)
+
+    throw new NoReturnControl
+  }
+
 }
 
 sealed trait Packed[+T] {

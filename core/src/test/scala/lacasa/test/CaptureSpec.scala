@@ -10,7 +10,7 @@ import org.junit.runners.JUnit4
 import scala.spores._
 import scala.spores.SporeConv._
 
-import lacasa.Box
+import lacasa.{Box, Packed}
 import Box._
 
 
@@ -39,9 +39,12 @@ class CaptureSpec {
           implicit val acc2 = packed2.access
           val box2: packed2.box.type = packed2.box
 
-          box2.capture(box)((x, y) => x.dat = y)(spore {
-            (d: Data2) =>
+          box2.capture(box)(_.dat = _)(spore { (packedData: Packed[Data2]) =>
+            implicit val accessData = packedData.access
+
+            packedData.box.open { d =>
               assert(d.dat.name == "John")
+            }
           })
         }
       }

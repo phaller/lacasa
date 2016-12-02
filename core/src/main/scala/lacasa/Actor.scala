@@ -9,7 +9,7 @@ import scala.reflect.{ClassTag, classTag}
 import scala.concurrent.ExecutionContext
 import scala.collection.mutable.Buffer
 
-import scala.spores.NullarySpore
+import scala.spores.{NullarySpore, Spore}
 
 
 object doNothing {
@@ -63,6 +63,24 @@ abstract class Actor[T] {
   final val self: ActorRef[T] = new InternalActorRef(this)
 
   def exit(): Nothing = {
+    throw new NoReturnControl
+  }
+
+  // swap for accessing fields of type Box[S]
+  def swap[S](select: => Box[S])(assign: Box[S] => Unit, newBox: Box[S])(
+    fun: Spore[Packed[S], Unit] { type Excluded = newBox.C })(
+    implicit access: CanAccess { type C = newBox.C }): Unit = {
+
+    val prev = select
+
+    // do the assignment
+    assign(newBox)
+
+    // invoke continuation
+    fun(
+      if (prev == null) Box.packedNull[S] else prev.pack()
+    )
+
     throw new NoReturnControl
   }
 

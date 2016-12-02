@@ -45,6 +45,12 @@ object Box {
     }
     internal[Int]
   }
+
+  private[lacasa] def packedNull[S] = new Packed[S] {
+    val box: Box[S] = Box.make[S](null.asInstanceOf[S])
+    val access = new CanAccess { type C = box.C }
+  }
+
 }
 
 sealed trait OnlyNothing[T]
@@ -86,15 +92,12 @@ sealed class Box[+T] private (private val instance: T) {
     assign(instance, newBox)
     // pass `prev` using fresh permission to continuation
     if (prev == null) {
-      fun(new Packed[S] {
-        val box: Box[S] = Box.make[S](null.asInstanceOf[S])
-        val access = new CanAccess { type C = box.C }
-      })
+      fun(Box.packedNull[S])
     } else {
       // we can do this inside the `lacasa` package :-)
       implicit val localAcc = new CanAccess { type C = prev.C }
       implicit def fakeOnlyNothing[T] = new OnlyNothing[T] {}
-      prev.open(spore {
+      prev.open(spore { // can simplify this: have access to prev.instance!
         val localFun = fun
         (prevValue: S) =>
           val b = Box.make[S](prevValue)
@@ -111,16 +114,15 @@ sealed class Box[+T] private (private val instance: T) {
    * The argument `assign` must have the form `(x, y) => x.f = y`.
    */
   def capture[S](consumed: Box[S])(assign: (T, S) => Unit)(
-    fun: Spore[T, Unit] { type Excluded = consumed.C })(
+    fun: Spore[Packed[T], Unit] /*{ type Excluded = consumed.C }*/)( // TODO: fix spores
     implicit access: CanAccess { type C = self.C },
-      accessConsumed: CanAccess { type C = consumed.C },
-      noCapture: OnlyNothing[fun.Captured]): Nothing = {
+      accessConsumed: CanAccess { type C = consumed.C }): Nothing = {
 
     // do the assignment
     assign(instance, consumed.instance)
 
     // invoke continuation
-    fun(instance)
+    fun(pack())
 
     throw new NoReturnControl
   }

@@ -18,7 +18,7 @@ class CaptureSpec {
     println(s"CaptureSpec.test")
     expectError("invalid reference to value acc") {
       """
-        import lacasa.Box
+        import lacasa.{Box, Packed}
         import Box._
         import scala.spores._
         class Data {
@@ -41,9 +41,10 @@ class CaptureSpec {
 
               box2.capture(box)((x, y) => x.dat = y)(spore {
                 val localBox = box
-                (d: Data2) =>
+                (packedData: Packed[Data2]) =>
+                  implicit val accessData = packedData.access
+
                   localBox.open { x => assert(false) }
-                  assert(d.dat.name == "John")
               })
             }
           }

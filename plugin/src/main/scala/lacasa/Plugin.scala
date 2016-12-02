@@ -22,7 +22,6 @@ class Plugin(val global: Global) extends NscPlugin {
   val boxCreationMethod = boxModule.moduleClass.tpe.member(newTermName("mkBox"))
   val boxClass = rootMirror.getClassByName(newTermName("lacasa.Box"))
   val boxOpenMethod = boxClass.tpe.member(newTermName("open"))
-  val boxSwapMethod = boxClass.tpe.member(newTermName("swap"))
 
   object PluginComponent extends NscPluginComponent {
     val global = Plugin.this.global

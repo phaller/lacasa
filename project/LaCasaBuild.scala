@@ -85,11 +85,13 @@ object LaCasaBuild extends Build {
     id   = "sandbox",
     base = file("sandbox")
   ) settings (
+    scalacOptions ++= Seq("-Xlog-implicits", "-Xprint:typer")
+  ) settings (
     commonSettings ++ usePluginSettings: _*
   ) settings (
     libraryDependencies <+= (scalaVersion)("org.scala-lang" % "scala-reflect" % _),
     publishArtifact in Compile := false
-  ) dependsOn(core)
+  ) dependsOn(core, tinyspores)
 
   lazy val samples = Project(
     id   = "samples",
@@ -97,5 +99,18 @@ object LaCasaBuild extends Build {
   ) settings (
     commonSettings ++ usePluginSettings: _*
   ) dependsOn(core)
+
+  lazy val tinyspores = Project(
+    id = "tinyspores",
+    base = file("tinyspores")
+  ) settings (
+    commonSettings
+  ) settings (
+    libraryDependencies <+= (scalaVersion)("org.scala-lang" % "scala-reflect" % _ % "provided"),
+    libraryDependencies <+= (scalaVersion)("org.scala-lang" % "scala-compiler" % _ % "test"),
+    libraryDependencies ++= Seq(Dependencies.junit, Dependencies.junitIntf),
+    testOptions += Tests.Argument(TestFrameworks.JUnit, "-q", "-v", "-s"),
+    parallelExecution in Test := false
+  )
 
 }

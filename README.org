@@ -1,29 +1,36 @@
-#+TITLE:   LaCasa
-#+AUTHOR:  Philipp Haller
+# LaCasa
 
-* Building
+## Building
 
 Building LaCasa requires sbt. The build consists of two steps. The
 first step consists of building and packaging the LaCasa compiler
 plugin:
-   : sbt 'project plugin' package
+```
+sbt 'project plugin' package
+```
 
 The second step consists of building and running projects like
-=samples= which depend on the packaged plugin. This requires starting
-sbt with the =lacasa.plugin.jar= JVM system property set to the path
+`samples` which depend on the packaged plugin. This requires starting
+sbt with the `lacasa.plugin.jar` JVM system property set to the path
 of the packaged plugin:
-   : sbt -Dlacasa.plugin.jar=plugin/target/scala-2.11/plugin_2.11.7-0.1.0-SNAPSHOT.jar
+```
+sbt -Dlacasa.plugin.jar=plugin/target/scala-2.11/plugin_2.11.7-0.1.0-SNAPSHOT.jar
+```
 
 Build and run samples:
-   : > project samples
-   : > run
+```
+> project samples
+> run
+```
 
-* Testing
+## Testing
 
-Once sbt has been started with the =lacasa.plugin.jar= JVM system
-property set, plugin tests can be run as follows:
-   : > project plugin
-   : > test
+Once sbt has been started with the `lacasa.plugin.jar` JVM system
+property set, the plugin tests can be run as follows:
+```
+> project plugin
+> test
+```
 
 The plugin tests are located in directory
-=plugin/src/test/scala/lacasa/=.
+`plugin/src/test/scala/lacasa/`.

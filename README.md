@@ -11,13 +11,12 @@ semantics enables programmers to seamlessly port concurrent programs
 running on a single machine to distributed programs running on
 large-scale clusters of machines.
 
-Paper: Philipp Haller and Alex Loiko.
-       [LaCasa: Lightweight Affinity and Object Capabilities in Scala](http://www.csc.kth.se/~phaller/doc/haller16-oopsla.pdf).
-       Proc. OOPSLA. ACM, 2016.
+Paper (preprint): Philipp Haller and Alex Loiko.
+                  [LaCasa: Lightweight Affinity and Object Capabilities in Scala](http://www.csc.kth.se/~phaller/doc/haller16-oopsla.pdf).
+                  Proc. OOPSLA. ACM, 2016. [[ACM DL](http://dl.acm.org/citation.cfm?id=2984042)]
 
-Slides: [Talk at OOPSLA '16](https://speakerdeck.com/phaller/lacasa-lightweight-affinity-and-object-capabilities-in-scala-1)
-
-Video: [Talk at Scala World '16](https://www.youtube.com/watch?v=nwWvPeX6U9w)
+Talk at Scala World '16: [video](https://www.youtube.com/watch?v=nwWvPeX6U9w),
+[slides](https://speakerdeck.com/phaller/can-we-make-concurrency-in-scala-safer)
 
 ## Building
 

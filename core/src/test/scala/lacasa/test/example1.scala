@@ -50,10 +50,8 @@ class ActorA extends Actor[Any] {
 class ActorB(p: Promise[String]) extends Actor[Message1] {
   override def receive(box: Box[Message1])
       (implicit acc: CanAccess { type C = box.C }) {
-    // mark as unsafe, since it captures Promise within `open`
-    box open { msg =>
-      p.success(msg.arr.mkString(","))
-    }
+    // Strings are Safe, and can therefore be extracted from the box.
+    p.success(box.extract(_.arr.mkString(",")))
   }
 }
 

@@ -280,7 +280,7 @@ class Plugin(val global: Global) extends NscPlugin {
     val okLaCasaModules: Set[String] = Set(
       "lacasa.Box",
       "lacasa.System",
-      "lacasa.OnlyNothing",
+      "lacasa.Safe",
       "lacasa.doNothing",
       "lacasa.sleep",
       "scala.spores.package",

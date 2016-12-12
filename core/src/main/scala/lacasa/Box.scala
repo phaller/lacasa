@@ -53,13 +53,13 @@ object Box {
 
 }
 
-sealed trait OnlyNothing[T]
+sealed trait Safe[T]
 
-object OnlyNothing {
-  implicit val onlyNothing: OnlyNothing[Nothing] = new OnlyNothing[Nothing] {}
-  implicit val intOnlyNothing: OnlyNothing[Int] = new OnlyNothing[Int] {}
-  implicit def actorRefOnlyNothing[T]: OnlyNothing[ActorRef[T]] = new OnlyNothing[ActorRef[T]] {}
-  implicit def tuple2OnlyNothing[T, S](implicit one: OnlyNothing[T], two: OnlyNothing[S]): OnlyNothing[(T, S)] = new OnlyNothing[(T, S)] {}
+object Safe {
+  implicit val nothingIsSafe: Safe[Nothing] = new Safe[Nothing] {}
+  implicit val intIsSafe: Safe[Int] = new Safe[Int] {}
+  implicit def actorRefIsSafe[T]: Safe[ActorRef[T]] = new Safe[ActorRef[T]] {}
+  implicit def tuple2IsSafe[T, S](implicit one: Safe[T], two: Safe[S]): Safe[(T, S)] = new Safe[(T, S)] {}
 }
 
 sealed class Box[+T] private (private val instance: T) {
@@ -76,7 +76,7 @@ sealed class Box[+T] private (private val instance: T) {
     }
   }
 
-  def open(fun: Spore[T, Unit])(implicit access: CanAccess { type C = self.C }, noCapture: OnlyNothing[fun.Captured]): Box[T] = {
+  def open(fun: Spore[T, Unit])(implicit access: CanAccess { type C = self.C }, noCapture: Safe[fun.Captured]): Box[T] = {
     fun(instance)
     self
   }
@@ -96,7 +96,7 @@ sealed class Box[+T] private (private val instance: T) {
     } else {
       // we can do this inside the `lacasa` package :-)
       implicit val localAcc = new CanAccess { type C = prev.C }
-      implicit def fakeOnlyNothing[T] = new OnlyNothing[T] {}
+      implicit def fakeSafe[T] = new Safe[T] {}
       prev.open(spore { // can simplify this: have access to prev.instance!
         val localFun = fun
         (prevValue: S) =>

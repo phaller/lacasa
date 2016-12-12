@@ -18,6 +18,7 @@ object doNothing {
       type Captured = Nothing
       type Excluded = box.C
       def apply(): Unit = {}
+      def skipScalaSamConversion: Nothing = ???
     }
 }
 
@@ -29,6 +30,7 @@ object sleep {
       def apply(): Unit = {
         Thread.sleep(millis)
       }
+      def skipScalaSamConversion: Nothing = ???
     }
 }
 

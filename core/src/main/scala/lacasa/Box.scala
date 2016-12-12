@@ -119,7 +119,7 @@ sealed class Box[+T] private (private val instance: T) {
    * The argument `assign` must have the form `(x, y) => x.f = y`.
    */
   def capture[S](consumed: Box[S])(assign: (T, S) => Unit)(
-    fun: Spore[Packed[T], Unit] /*{ type Excluded = consumed.C }*/)( // TODO: fix spores
+    fun: Spore[Packed[T], Unit] { type Excluded = consumed.C })( // TODO: fix spores
     implicit access: CanAccess { type C = self.C },
       accessConsumed: CanAccess { type C = consumed.C }): Nothing = {
 

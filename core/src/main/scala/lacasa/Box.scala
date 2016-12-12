@@ -61,7 +61,7 @@ object Box {
 
 }
 
-sealed trait Safe[T]
+/*sealed*/ trait Safe[T]
 
 object Safe {
   implicit val nothingIsSafe: Safe[Nothing] = new Safe[Nothing] {}

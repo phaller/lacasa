@@ -58,6 +58,7 @@ sealed trait Safe[T]
 object Safe {
   implicit val nothingIsSafe: Safe[Nothing] = new Safe[Nothing] {}
   implicit val intIsSafe: Safe[Int] = new Safe[Int] {}
+  implicit val stringIsSafe: Safe[String] = new Safe[String] {}
   implicit def actorRefIsSafe[T]: Safe[ActorRef[T]] = new Safe[ActorRef[T]] {}
   implicit def tuple2IsSafe[T, S](implicit one: Safe[T], two: Safe[S]): Safe[(T, S)] = new Safe[(T, S)] {}
 }
@@ -79,6 +80,10 @@ sealed class Box[+T] private (private val instance: T) {
   def open(fun: Spore[T, Unit])(implicit access: CanAccess { type C = self.C }, noCapture: Safe[fun.Captured]): Box[T] = {
     fun(instance)
     self
+  }
+
+  def extract[S: Safe](fun: Spore[T, S])(implicit access: CanAccess { type C = self.C }, noCapture: Safe[fun.Captured]): S = {
+    fun(instance)
   }
 
   // swap field

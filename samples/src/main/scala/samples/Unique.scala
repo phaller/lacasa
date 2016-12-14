@@ -58,9 +58,7 @@ class ActorA(next: ActorRef[C]) extends Actor[Container] {
 class ActorB extends Actor[C] {
   def receive(msg: Box[C])(implicit access: CanAccess { type C = msg.C }): Unit = {
     println("ActorB received object with array")
-    msg.open(spore { x =>
-      println(x.arr.mkString(","))
-    })
+    println(msg.extract(_.arr.mkString(",")))
   }
 }
 

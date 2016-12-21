@@ -66,6 +66,15 @@ abstract class Actor[T] {
     throw new NoReturnControl
   }
 
+  /* Variant of `open` for more convenient access to box fields.
+   *
+   * `fun` must satisfy the same safety constraints as closures passed to `open`
+   */
+  def update[S](select: => Box[S])(fun: Spore[S, S])(implicit noCapture: Safe[fun.Captured]): Unit = {
+    val theBox = select
+    theBox.updateInstance(fun)
+  }
+
   // swap for accessing fields of type Box[S]
   def swap[S](select: => Box[S])(assign: Box[S] => Unit, newBox: Box[S])(
     fun: Spore[Packed[S], Unit] { type Excluded = newBox.C })(

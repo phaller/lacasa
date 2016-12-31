@@ -64,7 +64,7 @@ object util {
   }
 
   def expectError(errorSnippet: String, compileOptions: String = "",
-                  baseCompileOptions: String = s"-cp ${toolboxClasspath}:${sporesClasspath} -Xplugin:${pluginPath}")(code: String) {
+                  baseCompileOptions: String = s"-cp ${toolboxClasspath}:${sporesClasspath} -Xplugin:${pluginPath} -P:lacasa:enable")(code: String) {
     intercept[ToolBoxError] {
       eval(code, compileOptions + " " + baseCompileOptions)
     }.getMessage mustContain errorSnippet

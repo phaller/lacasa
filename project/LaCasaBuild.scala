@@ -76,8 +76,9 @@ object LaCasaBuild extends Build {
     scalacOptions in Compile <++= (Keys.`package` in (plugin, Compile)) map { (jar: File) =>
       System.setProperty("lacasa.plugin.jar", jar.getAbsolutePath)
       val addPlugin = "-Xplugin:" + jar.getAbsolutePath
+      val enablePlugin = "-P:lacasa:enable"
       val dummy = "-Jdummy=" + jar.lastModified
-      Seq(addPlugin, dummy)
+      Seq(addPlugin, enablePlugin, dummy)
     }
   )
 

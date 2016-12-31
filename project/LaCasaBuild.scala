@@ -12,7 +12,7 @@ object LaCasaBuild extends Build {
     scalaVersion := "2.11.7", // neg tests only work on 2.11 atm
     crossVersion := CrossVersion.full,
     version := "0.1.0-SNAPSHOT",
-    organization := "org.",
+    organization := "io.github.phaller",
     resolvers += Resolver.sonatypeRepo("snapshots"),
     resolvers += Resolver.sonatypeRepo("releases"),
     publishMavenStyle := true,
@@ -32,7 +32,7 @@ object LaCasaBuild extends Build {
   )
 
   lazy val plugin = Project(
-    id   = "plugin",
+    id   = "lacasa-plugin",
     base = file("plugin")
   ) settings (
     commonSettings: _*
@@ -54,7 +54,7 @@ object LaCasaBuild extends Build {
   ) dependsOn(core)
 
   lazy val core = Project(
-    id = "core",
+    id = "lacasa-core",
     base = file("core")
   ) settings (
     commonSettings: _*
@@ -92,7 +92,7 @@ object LaCasaBuild extends Build {
   ) dependsOn(core)
 
   lazy val samples = Project(
-    id   = "samples",
+    id   = "lacasa-samples",
     base = file("samples")
   ) settings (
     commonSettings ++ usePluginSettings: _*

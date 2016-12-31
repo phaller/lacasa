@@ -11,12 +11,22 @@ import scala.collection.{mutable, immutable}
 import Util._
 
 
-class Plugin(val global: Global) extends NscPlugin {
+class Plugin(val global: Global) extends NscPlugin { self =>
   import global.{log => _, _}
 
   val name = "lacasa"
   val description = "LaCasa plugin"
-  val components = List[NscPluginComponent](new StackConfinement(global), PluginComponent, ReporterComponent)
+  val components = List[NscPluginComponent](new StackConfinement(global, self), PluginComponent, ReporterComponent)
+
+  var enabled = false
+
+  override def processOptions(options: List[String], error: String => Unit): Unit = {
+    if (options.contains("enable"))
+      enabled = true
+  }
+
+  override val optionsHelp: Option[String] =
+    Some("  -P:lacasa:enable        Enable LaCasa")
 
   val boxModule = rootMirror.getModuleByName(newTermName("lacasa.Box"))
   val boxCreationMethod = boxModule.moduleClass.tpe.member(newTermName("mkBox"))
@@ -720,6 +730,8 @@ class Plugin(val global: Global) extends NscPlugin {
 
     class OcapPhase(prev: Phase) extends StdPhase(prev) {
       override def apply(unit: CompilationUnit): Unit = {
+        if (!self.enabled) return
+
         log("applying LaCasa OcapPhase...")
         val oct = new OcapTraverser(unit)
         oct.traverse(unit.body)
@@ -747,7 +759,9 @@ class Plugin(val global: Global) extends NscPlugin {
       new StdPhase(prev) {
         import PluginComponent._
 
-        override def apply(unit: CompilationUnit): Unit =
+        override def apply(unit: CompilationUnit): Unit = {
+          if (!self.enabled) return
+
           if (!hasRun) {
             hasRun = true
             reporter.echo("LaCasa plugin ran successfully")
@@ -811,6 +825,7 @@ class Plugin(val global: Global) extends NscPlugin {
               log(s"""error: insecure classes: ${classNames.mkString(",")}""")
             }
           }
+        }
       }
   }
 }

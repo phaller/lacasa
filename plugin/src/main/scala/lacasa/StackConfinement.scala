@@ -13,7 +13,7 @@ import Util._
 
 /** Stack confinement checker
   */
-class StackConfinement(val global: Global) extends NscPluginComponent {
+class StackConfinement(val global: Global, plugin: Plugin) extends NscPluginComponent {
   import global.{log => _, _}
   import definitions._
   import reflect.internal.Flags._
@@ -318,6 +318,8 @@ class StackConfinement(val global: Global) extends NscPluginComponent {
 
   class SCPhase(prev: Phase) extends StdPhase(prev) {
     override def apply(unit: CompilationUnit): Unit = {
+      if (!plugin.enabled) return
+
       log("LaCasa stack confinement checking...")
       val sct = new SCTraverser(unit)
       sct.traverse(unit.body)

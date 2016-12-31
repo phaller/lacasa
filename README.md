@@ -20,24 +20,24 @@ Talk at Scala World '16: [video](https://www.youtube.com/watch?v=nwWvPeX6U9w),
 
 ## Building
 
-Building LaCasa requires sbt. The build consists of two steps. The
-first step consists of building and packaging the LaCasa compiler
-plugin:
+Building LaCasa requires [sbt](http://www.scala-sbt.org/). The build
+consists of two steps. The first step consists of building and
+packaging the LaCasa compiler plugin:
 ```
-sbt 'project plugin' package
+sbt 'project lacasa-plugin' package
 ```
 
 The second step consists of building and running projects like
-`samples` which depend on the packaged plugin. This requires starting
-sbt with the `lacasa.plugin.jar` JVM system property set to the path
-of the packaged plugin:
+`lacasa-samples` which depend on the packaged plugin. This requires
+starting sbt with the `lacasa.plugin.jar` JVM system property set to
+the path of the packaged plugin:
 ```
-sbt -Dlacasa.plugin.jar=plugin/target/scala-2.11/plugin_2.11.7-0.1.0-SNAPSHOT.jar
+sbt -Dlacasa.plugin.jar=plugin/target/scala-2.11/lacasa-plugin_2.11.7-0.1.0-SNAPSHOT.jar
 ```
 
 Build and run samples:
 ```
-> project samples
+> project lacasa-samples
 > run
 ```
 
@@ -46,7 +46,7 @@ Build and run samples:
 Once sbt has been started with the `lacasa.plugin.jar` JVM system
 property set, the plugin tests can be run as follows:
 ```
-> project plugin
+> project lacasa-plugin
 > test
 ```
 

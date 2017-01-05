@@ -42,4 +42,11 @@ class SafeActorRef[T](private val ref: ActorRef) {
     ref ! msg.pack()  // `pack()` accessible within package `lacasa`
     throw new NoReturnControl
   }
+
+  def sendAndThen(msg: Box[T])(cont: () => Unit)(implicit acc: CanAccess { type C = msg.C }): Nothing = {
+    // have to create a `Packed[T]`
+    ref ! msg.pack()  // `pack()` accessible within package `lacasa`
+    cont()
+    throw new NoReturnControl
+  }
 }

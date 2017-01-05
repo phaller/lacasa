@@ -33,6 +33,14 @@ object Box {
     throw new NoReturnControl
   }
 
+  // TODO: ensure safety by checking shape of `instance` expression
+  def mkBoxFor[T](instance: => T)(fun: Packed[T] => Unit): Nothing = {
+    val theBox = new Box[T](instance)
+    val packed = theBox.pack()
+    fun(packed)
+    throw new NoReturnControl
+  }
+
   // marker method as escape hatch for ControlThrowable checker
   def uncheckedCatchControl: Unit = {}
 

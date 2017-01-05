@@ -19,4 +19,18 @@ object Utils {
     throw new NoReturnControl
   }
 
+  def loopAndThen[T, S](iter: Iterator[T])(fun: T => Nothing)(cont: () => S): Nothing = if (iter.hasNext) {
+    val elem = iter.next()
+    try {
+      fun(elem)
+    } catch {
+      case _: NoReturnControl =>
+        Box.uncheckedCatchControl
+        loopAndThen(iter)(fun)(cont)
+    }
+  } else {
+    cont()
+    throw new NoReturnControl
+  }
+
 }

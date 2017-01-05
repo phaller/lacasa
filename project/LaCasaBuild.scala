@@ -9,7 +9,7 @@ object Dependencies {
 object LaCasaBuild extends Build {
 
   lazy val commonSettings = Defaults.defaultSettings ++ Seq(
-    scalaVersion := "2.11.8", // neg tests only work on 2.11 atm
+    scalaVersion := "2.11.7", // neg tests only work on 2.11 atm
     crossVersion := CrossVersion.full,
     version := "0.1.0-SNAPSHOT",
     organization := "io.github.phaller",
@@ -20,7 +20,7 @@ object LaCasaBuild extends Build {
     scalacOptions ++= Seq("-deprecation", "-feature"),
     parallelExecution in Test := false,
     logBuffered := false,
-    libraryDependencies += "ch.epfl.scala" %% "spores" % "0.4.4-SNAPSHOT",
+    libraryDependencies += "ch.epfl.scala" %% "spores" % "0.5.0-SNAPSHOT",
     libraryDependencies <+= (scalaVersion)("org.scala-lang" % "scala-reflect" % _),
     scalaHome := {
       val scalaHome = System.getProperty("lacasa.scala.home")

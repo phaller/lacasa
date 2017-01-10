@@ -20,6 +20,7 @@ object util {
       throw new Exception(s"Exception of type ${classTag[T]} was not thrown")
     } catch {
       case t: Throwable =>
+        Box.uncheckedCatchControl
         if (classTag[T].runtimeClass != t.getClass) throw t
         else t.asInstanceOf[T]
     }

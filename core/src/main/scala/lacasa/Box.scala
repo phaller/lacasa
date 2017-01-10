@@ -121,6 +121,30 @@ sealed class Box[+T] private (private val instance: T) {
     throw new NoReturnControl
   }
 
+  def swap1[S](select: T => Box[S])(assign: (T, Box[S]) => Unit, newBox: Box[S])(
+    fun: Packed[S] => Unit)(
+    implicit access: CanAccess { type C = newBox.C }): Unit = {
+    val prev = select(instance)
+    // do the assignment
+    assign(instance, newBox)
+    // pass `prev` using fresh permission to continuation
+    if (prev == null) {
+      fun(Box.packedNull[S])
+    } else {
+      // we can do this inside the `lacasa` package :-)
+      implicit val localAcc = new CanAccess { type C = prev.C }
+      implicit def fakeSafe[T] = new Safe[T] {}
+      prev.open(spore { // can simplify this: have access to prev.instance!
+        val localFun = fun
+        (prevValue: S) =>
+          val b = Box.make[S](prevValue)
+          val packed = b.pack()
+          localFun(packed)
+      })
+    }
+    throw new NoReturnControl
+  }
+
   /* Captures the `consumed` box, and merges it into `self`.
    * In the continuation `fun`, box `self` is open.
    *

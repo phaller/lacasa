@@ -26,12 +26,13 @@ class StackConfinement(val global: Global, plugin: Plugin) extends NscPluginComp
   val boxClass = rootMirror.getClassByName(newTermName("lacasa.Box"))
   val boxOpenMethod = boxClass.tpe.member(newTermName("open"))
   val boxSwapMethod = boxClass.tpe.member(newTermName("swap"))
+  val boxSwap1Method = boxClass.tpe.member(newTermName("swap1"))
 
   // TODO: how to handle Akka?
   val actorClass = rootMirror.getClassByName(newTermName("lacasa.Actor"))
   val actorSwapMethod = actorClass.tpe.member(newTermName("swap"))
 
-  val swapMethods = List(boxSwapMethod, actorSwapMethod)
+  val swapMethods = List(boxSwapMethod, boxSwap1Method, actorSwapMethod)
 
   /* Checks whether the owner chain of `sym` contains `owner`.
    *
@@ -219,7 +220,7 @@ class StackConfinement(val global: Global, plugin: Plugin) extends NscPluginComp
           }
         }
 
-      case Apply(nested @ Apply(Apply(fun, args1), args2), List(b @ Block(stats, expr))) if swapMethods.contains(fun.symbol) =>
+      case Apply(nested @ Apply(Apply(fun, args1), args2), List(b)) if swapMethods.contains(fun.symbol) =>
         log(s"checking apply of ${fun.symbol.name}")
         // traverse only continuation closure
         // constraints for args1 and args2 checked elsewhere

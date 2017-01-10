@@ -37,6 +37,13 @@ object LaCasaBuild extends Build {
   ) settings (
     commonSettings: _*
   ) settings (
+    scalacOptions in Test <++= (Keys.`package` in Compile) map { (jar: File) =>
+      System.setProperty("lacasa.plugin.jar", jar.getAbsolutePath)
+      val addPlugin = "-Xplugin:" + jar.getAbsolutePath
+      val enablePlugin = "-P:lacasa:enable"
+      val dummy = "-Jdummy=" + jar.lastModified
+      Seq(addPlugin, enablePlugin, dummy)
+    },
     resourceDirectory in Compile <<= baseDirectory(_ / "src" / "main" / "scala" / "lacasa" / "embedded"),
     libraryDependencies <+= (scalaVersion)("org.scala-lang" % "scala-library" % _),
     libraryDependencies <+= (scalaVersion)("org.scala-lang" % "scala-reflect" % _),

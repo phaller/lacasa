@@ -41,6 +41,14 @@ object Box {
     throw new NoReturnControl
   }
 
+  // TODO: in this case it is safe to return normally, since `instance` is safe
+  def mkBoxOf[T: Safe](instance: T)(fun: Packed[T] => Unit): Nothing = {
+    val theBox = new Box[T](instance)
+    val packed = theBox.pack()
+    fun(packed)
+    throw new NoReturnControl
+  }
+
   // marker method as escape hatch for ControlThrowable checker
   def uncheckedCatchControl: Unit = {}
 
@@ -61,7 +69,7 @@ object Box {
 
 }
 
-sealed trait Safe[T]
+/*sealed*/ trait Safe[T]
 
 object Safe {
   implicit val nothingIsSafe: Safe[Nothing] = new Safe[Nothing] {}

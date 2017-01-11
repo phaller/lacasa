@@ -14,7 +14,7 @@ import scala.concurrent.{Future, Promise, Await}
 import scala.concurrent.duration._
 
 import scala.spores._
-import scala.spores.SporeConv._
+//import scala.spores.SporeConv._
 
 import lacasa.{System, Box, CanAccess, Actor, ActorRef}
 import Box._

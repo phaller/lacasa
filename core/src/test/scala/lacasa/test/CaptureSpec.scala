@@ -8,7 +8,7 @@ import org.junit.runner.RunWith
 import org.junit.runners.JUnit4
 
 import scala.spores._
-import scala.spores.SporeConv._
+//import scala.spores.SporeConv._
 
 import lacasa.{Box, Packed}
 import Box._

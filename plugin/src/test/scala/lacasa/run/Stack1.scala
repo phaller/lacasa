@@ -35,4 +35,33 @@ class Stack1Spec {
     }
   }
 
+  @Test
+  def testSwap() {
+    println(s"run.Stack1Spec.testSwap")
+    class C {
+      var arr: Array[Int] = _
+    }
+    class Container {
+      import lacasa.Box
+      var part1: Box[C] = _
+      var part2: Box[C] = _
+    }
+    class D {
+      import lacasa.{Box, Packed, CanAccess}
+      import Box.mkBox
+      var fld: Any = _
+      def receive(msg: Box[Container])(implicit access: CanAccess { type C = msg.C }): Unit = {
+        mkBox[C] { packed =>
+          implicit val acc = packed.access
+          val b: packed.box.type = packed.box
+          msg.swap(_.part1)((cont, newBox) => cont.part1 = newBox, b)(
+            { (packed: Packed[C]) =>
+              implicit val acc = packed.access
+              val part1: packed.box.type = packed.box
+            })
+        }
+      }
+    }
+  }
+
 }

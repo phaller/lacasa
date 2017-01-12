@@ -6,8 +6,6 @@ package lacasa.samples
 import lacasa.{LaCasaApp, Box, CanAccess}
 import Box._  // imports `mkBox`
 
-import scala.spores._
-
 
 class Test {
   var arr: Array[Int] = _
@@ -28,7 +26,7 @@ class HasState {
     //
     // note that it would not be OK to capture "this";
     // however, in this case we're only capturing Ints, which is OK.
-    box1.open(spore {
+    box1.open({
       val local1 = this.i1
       val local2 = this.i2
       (t: Test) =>

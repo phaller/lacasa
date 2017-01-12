@@ -11,9 +11,6 @@ import scala.util.control.ControlThrowable
 import lacasa.{LaCasaApp, System, Box, Packed, CanAccess, Actor, ActorRef, doNothing, sleep}
 import Box._
 
-import scala.spores._
-import SporeConv._
-
 
 // this time C is ocap!
 class C {
@@ -35,12 +32,11 @@ class ActorA(next: ActorRef[C]) extends Actor[Container] {
       implicit val acc = packed.access
       val b: packed.box.type = packed.box
 
-      b.open(spore { obj =>
+      b.open({ obj =>
         obj.arr = Array(100, 200, 300)
       })
 
-      msg.swap(_.part1)((cont, newBox) => cont.part1 = newBox, b)(
-        spore { (packed: Packed[C]) =>
+      msg.swap(_.part1)((cont, newBox) => cont.part1 = newBox, b)({ (packed: Packed[C]) =>
           implicit val acc = packed.access
           val part1: packed.box.type = packed.box
 
@@ -84,13 +80,12 @@ object Transfer extends LaCasaApp {
         val box2: packed2.box.type = packed2.box
 
         // initialize object in box2 with new array
-        box2.open(spore { obj =>
+        box2.open({ obj =>
           obj.arr = Array(1, 2, 3, 4)
         })
 
         // assign `box2` to `part1` of container
-        containerBox.swap(_.part1)((cont, newBox) => cont.part1 = newBox, box2)(
-          spore {
+        containerBox.swap(_.part1)((cont, newBox) => cont.part1 = newBox, box2)({
             implicit val localAcc = packed.access
             val localContainerBox = containerBox
             val localA = a

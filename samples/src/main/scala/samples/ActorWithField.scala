@@ -8,9 +8,6 @@ import scala.util.control.ControlThrowable
 import lacasa.{System, Box, CanAccess, Actor, ActorRef, doNothing, Packed}
 import Box._
 
-import scala.spores._
-import SporeConv._
-
 
 class Start {
   var next: ActorRef[Message] = _
@@ -55,7 +52,7 @@ class ActorB extends Actor[Message] {
       implicit val access = packed.access
 
       // capture received message
-      packed.box.capture(box)(_.tmp = _)(spore { packedData =>
+      packed.box.capture(box)(_.tmp = _)({ packedData =>
         implicit val accessData = packedData.access
 
         packedData.box.open { d =>
@@ -64,7 +61,7 @@ class ActorB extends Actor[Message] {
           println(s"list inside: ${d.l}")
         }
 
-        swap(this.data)(x => this.data = x, packedData.box)(spore { (packedOld: Packed[Data]) =>
+        swap(this.data)(x => this.data = x, packedData.box)({ (packedOld: Packed[Data]) =>
           // packedOld is uninteresting (it's null)
         })
       })
@@ -84,7 +81,7 @@ object ActorWithField {
       implicit val acc = packed.access
       val box: packed.box.type = packed.box
 
-      box.open(spore { obj =>
+      box.open({ obj =>
         val innerSys = System()
         obj.next = innerSys.actor[ActorB, Message]
       })

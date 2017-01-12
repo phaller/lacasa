@@ -11,8 +11,6 @@ import scala.util.control.ControlThrowable
 import lacasa.{System, Box, CanAccess, Actor, ActorRef, doNothing}
 import Box._
 
-import scala.spores._
-
 
 class Sneaky { // not ocap!
   def process(a: Array[Int]): Unit = {
@@ -84,7 +82,7 @@ object Transfer {
       val box: packed.box.type = packed.box
 
       // initialize object in box
-      box.open(spore { obj =>
+      box.open({ obj =>
         val innerSys = System()
         obj.next = innerSys.actor[ActorB, Message]
       })

@@ -13,8 +13,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Future, Promise, Await}
 import scala.concurrent.duration._
 
-import scala.spores._
-
 import lacasa.{System, Box, CanAccess, Actor, ActorRef, doNothing}
 import Box._
 
@@ -30,7 +28,7 @@ class Start {
 class ActorA extends Actor[Any] {
   override def receive(b: Box[Any])
       (implicit acc: CanAccess { type C = b.C }) {
-    b.open(spore { x =>
+    b.open({ x =>
       x match {
         case s: Start =>
           mkBox[Message1] { packed =>
@@ -72,7 +70,7 @@ class Spec {
         import packed.access
         val box: packed.box.type = packed.box
         box open { s =>
-          s.next = capture(b) // !!! captures `b` within `open`
+          s.next = b
         }
         a.send(box) { doNothing.consume(packed.box) }
       }

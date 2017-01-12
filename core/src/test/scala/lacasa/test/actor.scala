@@ -13,9 +13,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Future, Promise, Await}
 import scala.concurrent.duration._
 
-import scala.spores._
-import scala.spores.SporeConv._
-
 import lacasa.{System, Box, CanAccess, Actor, ActorRef}
 import Box._
 
@@ -29,7 +26,7 @@ class NonSneaky {
 
 class ActorA(next: ActorRef[C]) extends Actor[C] {
   def receive(msg: Box[C])(implicit access: CanAccess { type C = msg.C }): Unit = {
-    msg.open(spore { (obj: C) =>
+    msg.open({ (obj: C) =>
       // OK: update array
       obj.arr(0) = 100
 
@@ -37,13 +34,13 @@ class ActorA(next: ActorRef[C]) extends Actor[C] {
       val ns = new NonSneaky
       ns.process(obj.arr)
     })
-    next.send(msg)(spore { () => })
+    next.send(msg)({ () => })
   }
 }
 
 class ActorB(p: Promise[String]) extends Actor[C] {
   def receive(msg: Box[C])(implicit access: CanAccess { type C = msg.C }): Unit = {
-    msg.open(spore { x =>
+    msg.open({ x =>
       p.success(x.arr.mkString(","))
     })
   }
@@ -72,11 +69,11 @@ class Spec {
         val box: packed.box.type = packed.box
 
         // initialize object in box with new array
-        box.open(spore { obj =>
+        box.open({ obj =>
           obj.arr = Array(1, 2, 3, 4)
         })
 
-        a.send(box)(spore { () => })
+        a.send(box)({ () => })
       }
     } catch {
       case t: Throwable =>

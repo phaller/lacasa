@@ -13,8 +13,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Future, Promise, Await}
 import scala.concurrent.duration._
 
-import scala.spores._
-
 import lacasa.{System, Box, CanAccess, Actor, ActorRef, doNothing}
 import Box._
 
@@ -34,7 +32,7 @@ final class Pong extends Msg {
 
 class ActorA(next: ActorRef[Msg]) extends Actor[Msg] {
   def receive(msg: Box[Msg])(implicit access: CanAccess { type C = msg.C }): Unit = {
-    msg.open(spore {
+    msg.open({
       val selfRef = this.self
       val nextRef = next
       m => m match {
@@ -44,7 +42,7 @@ class ActorA(next: ActorRef[Msg]) extends Actor[Msg] {
             val box: packed.box.type = packed.box
 
             // initialize `Ping` object in box
-            box.open(spore {
+            box.open({
               val localSelf = selfRef  // captures `selfRef` within `open`
               ping => ping.sender = localSelf
             })
@@ -61,7 +59,7 @@ class ActorA(next: ActorRef[Msg]) extends Actor[Msg] {
               val box: packed.box.type = packed.box
 
               // initialize `Ping` object in box with updated counter
-              box.open(spore {
+              box.open({
                 val localSelf  = selfRef    // captures `selfRef` within `open`
                 val localCount = pong.count // captures `pong.count` within `open`
                 ping =>
@@ -79,7 +77,7 @@ class ActorA(next: ActorRef[Msg]) extends Actor[Msg] {
 
 class ActorB(p: Promise[Boolean]) extends Actor[Msg] {
   def receive(msg: Box[Msg])(implicit access: CanAccess { type C = msg.C }): Unit = {
-    msg.open(spore { x =>
+    msg.open({ x =>
       x match {
         case ping: Ping =>
           if (ping.count == 100) { // done
@@ -90,7 +88,7 @@ class ActorB(p: Promise[Boolean]) extends Actor[Msg] {
               val box: packed.box.type = packed.box
 
               // initialize `Pong` object in box with updated counter
-              box.open(spore {
+              box.open({
                 val localCount = ping.count // captures `ping.count` (Int) within `open`
                 pong =>
                   pong.count  = localCount

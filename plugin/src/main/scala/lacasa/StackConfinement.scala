@@ -219,7 +219,7 @@ class StackConfinement(val global: Global, plugin: Plugin) extends NscPluginComp
           }
         }
 
-      case Apply(nested @ Apply(Apply(fun, args1), args2), List(b @ Block(stats, expr))) if swapMethods.contains(fun.symbol) =>
+      case Apply(nested @ Apply(Apply(fun, args1), args2), List(b)) if swapMethods.contains(fun.symbol) =>
         log(s"checking apply of ${fun.symbol.name}")
         // traverse only continuation closure
         // constraints for args1 and args2 checked elsewhere

@@ -9,27 +9,15 @@ import scala.reflect.{ClassTag, classTag}
 import scala.concurrent.ExecutionContext
 import scala.collection.mutable.Buffer
 
-import scala.spores.{NullarySpore, Spore}
-
 
 object doNothing {
-  def consume[T](box: Box[T]): NullarySpore[Unit] { type Excluded = box.C } =
-    new NullarySpore[Unit] {
-      type Captured = Nothing
-      type Excluded = box.C
-      def apply(): Unit = {}
-    }
+  def consume[T](box: Box[T]): () => Unit =
+    () => {}
 }
 
 object sleep {
-  def consume[T](box: Box[T])(millis: Long): NullarySpore[Unit] { type Excluded = box.C } =
-    new NullarySpore[Unit] {
-      type Captured = Nothing
-      type Excluded = box.C
-      def apply(): Unit = {
-        Thread.sleep(millis)
-      }
-    }
+  def consume[T](box: Box[T])(millis: Long): () => Unit =
+    () => Thread.sleep(millis)
 }
 
 /**
@@ -68,7 +56,7 @@ abstract class Actor[T] {
 
   // swap for accessing fields of type Box[S]
   def swap[S](select: => Box[S])(assign: Box[S] => Unit, newBox: Box[S])(
-    fun: Spore[Packed[S], Unit] { type Excluded = newBox.C })(
+    fun: Function[Packed[S], Unit])(
     implicit access: CanAccess { type C = newBox.C }): Unit = {
 
     val prev = select
@@ -155,13 +143,13 @@ private[lacasa] class MessageHandlerTask[T](
   * additionally include an implicit permission parameter.
   */
 abstract class ActorRef[T] {
-  def send(msg: Box[T])(cont: NullarySpore[Unit] { type Excluded = msg.C })
+  def send(msg: Box[T])(cont: () => Unit)
           (implicit acc: CanAccess { type C = msg.C }): Nothing
 }
 
 // Note: class final and constructor private.
 final class InternalActorRef[T] private[lacasa] (instance: Actor[T]) extends ActorRef[T] {
-  override def send(msg: Box[T])(cont: NullarySpore[Unit] { type Excluded = msg.C })
+  override def send(msg: Box[T])(cont: () => Unit)
           (implicit acc: CanAccess { type C = msg.C }): Nothing =
     // *internally* it is OK to create a `Packed` instance
     instance.send(msg.pack())(cont)

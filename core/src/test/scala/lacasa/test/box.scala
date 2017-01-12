@@ -13,9 +13,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Future, Promise, Await}
 import scala.concurrent.duration._
 
-import scala.spores._
-import scala.spores.SporeConv._
-
 import lacasa.{System, Box, CanAccess, Actor, ActorRef}
 import Box._
 
@@ -41,20 +38,20 @@ class ActorA(next: ActorRef[C]) extends Actor[Msg] {
       val box: packed.box.type = packed.box
 
       // initialize object in box
-      box.open(spore { obj =>
+      box.open({ obj =>
         val d = new D
         d.g = obj
         obj.f = d
       })
 
-      next.send(box)(spore { () => })
+      next.send(box)({ () => })
     }
   }
 }
 
 class ActorB(p: Promise[Boolean]) extends Actor[C] {
   def receive(msg: Box[C])(implicit access: CanAccess { type C = msg.C }): Unit = {
-    msg.open(spore { x =>
+    msg.open({ x =>
       val d = x.f
       // check that `d` refers back to `x`
       p.success(d.g == x)
@@ -79,7 +76,7 @@ class Spec {
       mkBox[Start] { packed =>
         import packed.access
         val box: packed.box.type = packed.box
-        a.send(box)(spore { () => })
+        a.send(box)({ () => })
       }
     } catch {
       case t: Throwable =>

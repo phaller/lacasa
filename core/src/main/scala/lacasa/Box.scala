@@ -5,10 +5,7 @@ package lacasa
 
 import scala.reflect.{ClassTag, classTag}
 
-import scala.spores._
-
 import scala.util.control.ControlThrowable
-
 
 private class NoReturnControl extends ControlThrowable {
   // do not fill in stack trace for efficiency
@@ -24,12 +21,12 @@ sealed class CanAccess {
 
 object Box {
 
-  def mkBox[T: ClassTag](spore: Packed[T] => Unit): Nothing = {
+  def mkBox[T: ClassTag](body: Packed[T] => Unit): Nothing = {
     val cl = classTag[T].runtimeClass
     val instance: T = cl.newInstance().asInstanceOf[T]
     val theBox = new Box[T](instance)
     val packed = theBox.pack()
-    spore(packed)
+    body(packed)
     throw new NoReturnControl
   }
 
@@ -85,12 +82,12 @@ sealed class Box[+T] private (private val instance: T) {
     }
   }
 
-  def open(fun: Spore[T, Unit])(implicit access: CanAccess { type C = self.C }, noCapture: Safe[fun.Captured]): Box[T] = {
+  def open(fun: Function[T, Unit])(implicit access: CanAccess { type C = self.C }): Box[T] = {
     fun(instance)
     self
   }
 
-  def extract[S: Safe](fun: Spore[T, S])(implicit access: CanAccess { type C = self.C }, noCapture: Safe[fun.Captured]): S = {
+  def extract[S: Safe](fun: Function[T, S])(implicit access: CanAccess { type C = self.C }): S = {
     fun(instance)
   }
 
@@ -98,7 +95,7 @@ sealed class Box[+T] private (private val instance: T) {
   // `select` must have form `_.f` (LaCasa plugin checks)
   // for now: `assign` must have form `(x, y) => x.f = y`
   def swap[S](select: T => Box[S])(assign: (T, Box[S]) => Unit, newBox: Box[S])(
-    fun: Spore[Packed[S], Unit] { type Excluded = newBox.C })(
+    fun: Function[Packed[S], Unit])(
     implicit access: CanAccess { type C = newBox.C }): Unit = {
     val prev = select(instance)
     // do the assignment
@@ -110,7 +107,7 @@ sealed class Box[+T] private (private val instance: T) {
       // we can do this inside the `lacasa` package :-)
       implicit val localAcc = new CanAccess { type C = prev.C }
       implicit def fakeSafe[T] = new Safe[T] {}
-      prev.open(spore { // can simplify this: have access to prev.instance!
+      prev.open({ // can simplify this: have access to prev.instance!
         val localFun = fun
         (prevValue: S) =>
           val b = Box.make[S](prevValue)
@@ -127,7 +124,7 @@ sealed class Box[+T] private (private val instance: T) {
    * The argument `assign` must have the form `(x, y) => x.f = y`.
    */
   def capture[S](consumed: Box[S])(assign: (T, S) => Unit)(
-    fun: Spore[Packed[T], Unit] /*{ type Excluded = consumed.C }*/)( // TODO: fix spores
+    fun: Function[Packed[T], Unit])(
     implicit access: CanAccess { type C = self.C },
       accessConsumed: CanAccess { type C = consumed.C }): Nothing = {
 

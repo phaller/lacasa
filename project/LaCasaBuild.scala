@@ -8,7 +8,7 @@ object Dependencies {
 
 object LaCasaBuild extends Build {
 
-  lazy val commonSettings = Defaults.defaultSettings ++ Seq(
+  lazy val commonSettings = Defaults.coreDefaultSettings ++ Seq(
     scalaVersion := "2.11.7", // neg tests only work on 2.11 atm
     crossVersion := CrossVersion.full,
     version := "0.1.0-SNAPSHOT",
@@ -21,7 +21,7 @@ object LaCasaBuild extends Build {
     parallelExecution in Test := false,
     logBuffered := false,
     libraryDependencies += "org.scala-lang.modules" %% "spores-core" % "0.2.4",
-    libraryDependencies <+= (scalaVersion)("org.scala-lang" % "scala-reflect" % _),
+    libraryDependencies += { "org.scala-lang" % "scala-reflect" % scalaVersion.value },
     scalaHome := {
       val scalaHome = System.getProperty("lacasa.scala.home")
       if (scalaHome != null) {
@@ -37,21 +37,23 @@ object LaCasaBuild extends Build {
   ) settings (
     commonSettings: _*
   ) settings (
-    scalacOptions in Test <++= (Keys.`package` in Compile) map { (jar: File) =>
+    scalacOptions in Test ++= {
+      val jar: File = (Keys.`package` in Compile).value
       System.setProperty("lacasa.plugin.jar", jar.getAbsolutePath)
       val addPlugin = "-Xplugin:" + jar.getAbsolutePath
       val enablePlugin = "-P:lacasa:enable"
       val dummy = "-Jdummy=" + jar.lastModified
       Seq(addPlugin, enablePlugin, dummy)
     },
-    resourceDirectory in Compile <<= baseDirectory(_ / "src" / "main" / "scala" / "lacasa" / "embedded"),
-    libraryDependencies <+= (scalaVersion)("org.scala-lang" % "scala-library" % _),
-    libraryDependencies <+= (scalaVersion)("org.scala-lang" % "scala-reflect" % _),
-    libraryDependencies <+= (scalaVersion)("org.scala-lang" % "scala-compiler" % _),
+    resourceDirectory in Compile := baseDirectory.value / "src" / "main" / "scala" / "lacasa" / "embedded",
+    libraryDependencies += { "org.scala-lang" % "scala-library"  % scalaVersion.value },
+    libraryDependencies += { "org.scala-lang" % "scala-reflect"  % scalaVersion.value },
+    libraryDependencies += { "org.scala-lang" % "scala-compiler" % scalaVersion.value },
     libraryDependencies ++= Seq(Dependencies.junit, Dependencies.junitIntf),
     publishMavenStyle := true,
     publishArtifact in Test := false,
-    publishTo <<= version { v: String =>
+    publishTo := {
+      val v = version.value
       val nexus = "https://oss.sonatype.org/"
       if (v.trim.endsWith("SNAPSHOT"))
         Some("snapshots" at nexus + "content/repositories/snapshots")
@@ -70,7 +72,8 @@ object LaCasaBuild extends Build {
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-q", "-v", "-s"),
     publishMavenStyle := true,
     publishArtifact in Test := false,
-    publishTo <<= version { v: String =>
+    publishTo := {
+      val v = version.value
       val nexus = "https://oss.sonatype.org/"
       if (v.trim.endsWith("SNAPSHOT"))
         Some("snapshots" at nexus + "content/repositories/snapshots")
@@ -80,7 +83,8 @@ object LaCasaBuild extends Build {
   )
 
   lazy val usePluginSettings = Seq(
-    scalacOptions in Compile <++= (Keys.`package` in (plugin, Compile)) map { (jar: File) =>
+    scalacOptions in Compile ++= {
+      val jar: File = (Keys.`package` in (plugin, Compile)).value
       System.setProperty("lacasa.plugin.jar", jar.getAbsolutePath)
       val addPlugin = "-Xplugin:" + jar.getAbsolutePath
       val enablePlugin = "-P:lacasa:enable"
@@ -95,7 +99,7 @@ object LaCasaBuild extends Build {
   ) settings (
     commonSettings ++ usePluginSettings: _*
   ) settings (
-    libraryDependencies <+= (scalaVersion)("org.scala-lang" % "scala-reflect" % _),
+    libraryDependencies += { "org.scala-lang" % "scala-reflect" % scalaVersion.value },
     publishArtifact in Compile := false
   ) dependsOn(core)
 

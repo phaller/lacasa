@@ -8,7 +8,7 @@ import scala.reflect.{ClassTag, classTag}
 import scala.spores._
 
 import scala.util.control.ControlThrowable
-
+import scala.annotation.unchecked.uncheckedVariance
 
 private class NoReturnControl extends ControlThrowable {
   // do not fill in stack trace for efficiency
@@ -71,7 +71,7 @@ object Safe {
   implicit def tuple2IsSafe[T, S](implicit one: Safe[T], two: Safe[S]): Safe[(T, S)] = new Safe[(T, S)] {}
 }
 
-sealed class Box[+T] private (private val instance: T) {
+sealed class Box[+T] private (private var instance: T @uncheckedVariance) {
   self =>
 
   type C
@@ -83,6 +83,11 @@ sealed class Box[+T] private (private val instance: T) {
       implicit val access: CanAccess { type C = box.C } =
         new CanAccess { type C = box.C }
     }
+  }
+
+  // trusted operation
+  private[lacasa] def updateInstance(fun: T => T @uncheckedVariance): Unit = {
+    instance = fun(instance)
   }
 
   def open(fun: Spore[T, Unit])(implicit access: CanAccess { type C = self.C }, noCapture: Safe[fun.Captured]): Box[T] = {
